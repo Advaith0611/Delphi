@@ -1,14 +1,11 @@
-import type { Editor } from 'tldraw'
+import { exportToCanvas } from '@excalidraw/excalidraw'
+import type { CanvasEditor } from './excalidraw'
 import { useAppStore } from '../store/useAppStore'
 import type { CanvasBounds, CanvasVisualContext } from '../ai/canvasProtocol'
 import type { EmbeddedCanvasObject } from '../types'
 
 const MAX_VISUAL_WIDTH = 1600
 const MAX_VISUAL_HEIGHT = 1000
-
-function boxToBounds(box: { x: number; y: number; w: number; h: number }): CanvasBounds {
-  return { x: box.x, y: box.y, w: box.w, h: box.h }
-}
 
 function loadImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -82,32 +79,31 @@ function createBlankDataUrl(width: number, height: number) {
   return canvas.toDataURL('image/png')
 }
 
-export async function captureCanvasVisualContext(editor: Editor): Promise<CanvasVisualContext> {
-  const viewportPageBounds = boxToBounds(editor.getViewportPageBounds())
-  const screenBounds = editor.getViewportScreenBounds()
+export async function captureCanvasVisualContext(editor: CanvasEditor): Promise<CanvasVisualContext> {
+  const viewportPageBounds = editor.getViewportSceneBounds()
+  const screenBounds = editor.getViewport().screenBounds
   const exportScale = Math.min(1, MAX_VISUAL_WIDTH / screenBounds.w, MAX_VISUAL_HEIGHT / screenBounds.h)
   const width = Math.max(1, Math.round(screenBounds.w * exportScale))
   const height = Math.max(1, Math.round(screenBounds.h * exportScale))
   const pageToImageScale = width / viewportPageBounds.w
-  const shapeIds = editor.getCurrentPageShapes().map((shape) => shape.id)
+  const elements = editor.getElements()
   const notes = [
     'Captured only when the user clicked Generate.',
     'Webpage embeds are represented by their visible frame metadata because browser security prevents reading cross-origin iframe pixels.',
   ]
 
   let baseImage = { url: createBlankDataUrl(width, height), width, height }
-  if (shapeIds.length) {
+  if (elements.length) {
     try {
-      baseImage = await editor.toImageDataUrl(shapeIds, {
-        bounds: editor.getViewportPageBounds(),
-        background: true,
-        format: 'png',
-        padding: 0,
-        pixelRatio: 1,
-        scale: exportScale * editor.getCamera().z,
+      const exported = await exportToCanvas({
+        elements,
+        appState: { ...editor.api.getAppState(), viewBackgroundColor: '#f7efe3' },
+        files: editor.api.getFiles(),
+        maxWidthOrHeight: Math.max(width, height),
       })
+      baseImage = { url: exported.toDataURL('image/png'), width: exported.width, height: exported.height }
     } catch {
-      notes.push('tldraw bitmap export failed; using a generated visual context fallback.')
+      notes.push('Excalidraw bitmap export failed; using a generated visual context fallback.')
     }
   }
 
@@ -135,7 +131,7 @@ export async function captureCanvasVisualContext(editor: Editor): Promise<Canvas
     const image = await loadImage(baseImage.url)
     ctx.drawImage(image, 0, 0, width, height)
   } catch {
-    notes.push('tldraw bitmap export could not be loaded into the visual context canvas.')
+    notes.push('Excalidraw bitmap export could not be loaded into the visual context canvas.')
   }
 
   const embeddedObjects = useAppStore

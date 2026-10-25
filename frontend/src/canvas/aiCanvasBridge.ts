@@ -1,607 +1,164 @@
-import {
-  b64Vecs,
-  createShapeId,
-  renderPlaintextFromRichText,
-  toRichText,
-  type Editor,
-  type TLShape,
-  type TLShapeId,
-  type TLRichText,
-} from 'tldraw'
+import type { CanvasEditor, ExcalidrawElement } from './excalidraw'
 import { useAppStore } from '../store/useAppStore'
 import type {
   CanvasAction,
   CanvasActionBatchResult,
   CanvasActionResult,
-  CanvasBounds,
   CanvasObjectKind,
   CanvasObjectSnapshot,
   CanvasRelationship,
   CanvasState,
-  CanvasStyle,
   SceneGraph,
   SceneGraphNode,
 } from '../ai/canvasProtocol'
 import type { EmbeddedCanvasObject, EmbeddedCanvasObjectKind } from '../types'
 
-type ShapePartial = Parameters<Editor['createShapes']>[0][number]
-type ShapeUpdate = Parameters<Editor['updateShapes']>[0][number]
-
 const DEFAULT_EMBEDDED_SIZE = { w: 420, h: 300 }
-
-function propString(props: Record<string, unknown>, key: string) {
-  const value = props[key]
-  return typeof value === 'string' ? value : undefined
+const colors: Record<string, string> = {
+  black: '#1e1e1e', blue: '#1971c2', green: '#2f9e44', grey: '#868e96',
+  orange: '#e67700', red: '#e03131', violet: '#7048e8', white: '#ffffff', yellow: '#f08c00',
 }
 
-function propNumber(props: Record<string, unknown>, key: string) {
-  const value = props[key]
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
-}
-
-function shapeText(editor: Editor, props: Record<string, unknown>) {
-  const text = propString(props, 'text') ?? propString(props, 'url')
-  if (text) return text
-
-  const richText = props.richText
-  if (richText && typeof richText === 'object') {
-    return renderPlaintextFromRichText(editor, richText as TLRichText)
-  }
-
-  return undefined
-}
-
-function shapeBounds(editor: Editor, shape: TLShape): CanvasBounds {
-  const pageBounds = editor.getShapePageBounds(shape)
-  if (pageBounds) {
-    return {
-      x: pageBounds.x,
-      y: pageBounds.y,
-      w: pageBounds.w,
-      h: pageBounds.h,
-    }
-  }
-
-  const props = shape.props as Record<string, unknown>
-  return {
-    x: Number(shape.x ?? 0),
-    y: Number(shape.y ?? 0),
-    w: propNumber(props, 'w') ?? propNumber(props, 'scale') ?? 120,
-    h: propNumber(props, 'h') ?? propNumber(props, 'scale') ?? 72,
-  }
-}
-
-function styleFromShape(props: Record<string, unknown>): CanvasStyle {
-  return {
-    color: propString(props, 'color') ?? propString(props, 'labelColor'),
-    fill: propString(props, 'fill'),
-    stroke: propString(props, 'color'),
-    dash: propString(props, 'dash'),
-    font: propString(props, 'font'),
-  }
-}
-
-function kindFromShape(shape: TLShape): CanvasObjectKind {
-  if (shape.type === 'geo') {
-    const geo = propString(shape.props as unknown as Record<string, unknown>, 'geo')
-    if (geo === 'rectangle') return 'rectangle'
-    if (geo === 'ellipse' || geo === 'oval') return 'circle'
-    return 'polygon'
-  }
-
-  if (shape.type === 'draw') return 'freehand'
-  if (shape.type === 'arrow') return 'arrow'
-  if (shape.type === 'line') return 'line'
-  if (shape.type === 'text') return 'text'
-  if (shape.type === 'group') return 'group'
-  if (shape.type === 'image') return 'image'
-
-  return 'shape'
-}
+function color(value?: string) { return value ? (colors[value.toLowerCase()] ?? value) : '#1e1e1e' }
+function fill(value?: string) { return value && value !== 'none' ? (value.startsWith('#') ? value : '#fff3bf') : 'transparent' }
+function elementText(element: ExcalidrawElement) { return (element as ExcalidrawElement & { text?: string }).text }
+function metadata(element: ExcalidrawElement) { return ((element as ExcalidrawElement & { customData?: Record<string, unknown> }).customData ?? {}) }
 
 function embeddedKind(kind: EmbeddedCanvasObjectKind, mimeType?: string): CanvasObjectKind {
-  if (kind === 'file' && mimeType?.includes('markdown')) return 'markdown'
-  return kind
+  return kind === 'file' && mimeType?.includes('markdown') ? 'markdown' : kind
 }
 
-function shapeRelationships(shape: TLShape, childIds: string[]): CanvasRelationship[] {
-  const relationships: CanvasRelationship[] = []
+function kindFromElement(element: ExcalidrawElement): CanvasObjectKind {
+  if (element.type === 'rectangle') return 'rectangle'
+  if (element.type === 'ellipse') return 'circle'
+  if (element.type === 'freedraw') return 'freehand'
+  if (element.type === 'arrow' || element.type === 'line' || element.type === 'text') return element.type
+  return element.type === 'image' ? 'image' : 'shape'
+}
 
-  if ('parentId' in shape && shape.parentId) {
-    relationships.push({ type: 'parent', objectId: String(shape.parentId) })
-  }
-
-  childIds.forEach((objectId) => relationships.push({ type: 'child', objectId }))
-  return relationships
+function relationships(element: ExcalidrawElement): CanvasRelationship[] {
+  const groupId = element.groupIds.at(-1)
+  return groupId ? [{ type: 'group', objectId: groupId }] : []
 }
 
 function buildSceneGraph(objects: CanvasObjectSnapshot[]): SceneGraph {
-  const nodesById = new Map<string, SceneGraphNode>()
-
-  objects.forEach((object) => {
-    nodesById.set(object.id, {
-      id: object.id,
-      source: object.source,
-      kind: object.kind,
-      parentId: object.parentId,
-      children: [],
-      bounds: object.bounds,
-      layerIndex: object.layerIndex,
-      relationships: object.relationships,
-    })
-  })
-
+  const flat: SceneGraphNode[] = objects.map((object) => ({ id: object.id, source: object.source, kind: object.kind, parentId: object.parentId, children: [], bounds: object.bounds, layerIndex: object.layerIndex, relationships: object.relationships }))
+  const byId = new Map(flat.map((node) => [node.id, node]))
   const roots: SceneGraphNode[] = []
-  const flat = Array.from(nodesById.values())
-
-  flat.forEach((node) => {
-    if (node.parentId && nodesById.has(node.parentId)) {
-      nodesById.get(node.parentId)?.children.push(node)
-    } else {
-      roots.push(node)
-    }
-  })
-
+  flat.forEach((node) => node.parentId && byId.has(node.parentId) ? byId.get(node.parentId)?.children.push(node) : roots.push(node))
   return { nodes: roots, flat }
 }
 
-function normalizeTldrawColor(value?: string) {
-  if (!value) return undefined
-  const named = value.trim().toLowerCase()
-  const supported = new Set([
-    'black',
-    'blue',
-    'green',
-    'grey',
-    'light-blue',
-    'light-green',
-    'light-red',
-    'light-violet',
-    'orange',
-    'red',
-    'violet',
-    'white',
-    'yellow',
-  ])
-
-  return supported.has(named) ? named : undefined
-}
-
-function normalizeFill(value?: string) {
-  if (!value) return undefined
-  const named = value.trim().toLowerCase()
-  if (['none', 'semi', 'solid', 'fill', 'pattern', 'lined-fill'].includes(named)) return named
-  return named.startsWith('#') ? 'solid' : undefined
-}
-
-function embeddedId(id?: string) {
-  return id ?? `embed-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function shapeId(id?: string) {
-  return id ? createShapeId(id.replace(/^shape:/, '')) : createShapeId()
-}
-
-function asShapePartial(shape: unknown) {
-  return shape as ShapePartial
-}
-
-function drawSizeFromStrokeWidth(strokeWidth?: number) {
-  if (!strokeWidth || strokeWidth <= 3) return 's'
-  if (strokeWidth <= 6) return 'm'
-  if (strokeWidth <= 10) return 'l'
-  return 'xl'
-}
-
-function createEmbeddedObject(
-  action: Extract<
-    CanvasAction,
-    { action: 'create_file' | 'create_image' | 'create_pdf' | 'create_markdown' | 'create_webpage' }
-  >,
-): EmbeddedCanvasObject {
-  if (action.action === 'create_webpage') {
-    return {
-      id: embeddedId(action.id),
-      kind: 'webpage',
-      x: action.x,
-      y: action.y,
-      w: action.width,
-      h: action.height,
-      title: action.title ?? new URL(action.url).hostname.replace(/^www\./, ''),
-      url: action.url,
-      createdAt: new Date().toISOString(),
-      metadata: action.metadata,
-    }
-  }
-
-  const kind =
-    action.action === 'create_image'
-      ? 'image'
-      : action.action === 'create_pdf'
-        ? 'pdf'
-        : 'file'
-
+function createEmbeddedObject(action: Extract<CanvasAction, { action: 'create_file' | 'create_image' | 'create_pdf' | 'create_markdown' | 'create_webpage' }>): EmbeddedCanvasObject {
+  const id = action.id ?? `embed-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  if (action.action === 'create_webpage') return { id, kind: 'webpage', x: action.x, y: action.y, w: action.width, h: action.height, title: action.title ?? new URL(action.url).hostname.replace(/^www\./, ''), url: action.url, createdAt: new Date().toISOString(), metadata: action.metadata }
   return {
-    id: embeddedId(action.id),
-    kind,
-    x: action.x,
-    y: action.y,
-    w: action.width || DEFAULT_EMBEDDED_SIZE.w,
-    h: action.height || DEFAULT_EMBEDDED_SIZE.h,
-    title: action.title,
-    mimeType: action.mimeType,
-    size: action.size,
-    dataUrl: action.dataUrl,
-    createdAt: new Date().toISOString(),
-    metadata: action.metadata,
+    id, kind: action.action === 'create_image' ? 'image' : action.action === 'create_pdf' ? 'pdf' : 'file',
+    x: action.x, y: action.y, w: action.width || DEFAULT_EMBEDDED_SIZE.w, h: action.height || DEFAULT_EMBEDDED_SIZE.h,
+    title: action.title, mimeType: action.mimeType, size: action.size, dataUrl: action.dataUrl, createdAt: new Date().toISOString(), metadata: action.metadata,
   }
 }
 
-function createShapeFromAction(action: CanvasAction): ShapePartial | null {
-  if (action.action === 'create_rectangle' || action.action === 'create_circle') {
-    return asShapePartial({
-      id: shapeId(action.id),
-      type: 'geo',
-      x: action.x,
-      y: action.y,
-      meta: action.metadata ?? {},
-      props: {
-        geo: action.action === 'create_circle' ? 'ellipse' : 'rectangle',
-        w: action.width,
-        h: action.height,
-        color: normalizeTldrawColor(action.color) ?? 'black',
-        fill: normalizeFill(action.fill) ?? 'semi',
-        richText: toRichText(action.text ?? ''),
-      },
-    })
-  }
-
-  if (action.action === 'create_text') {
-    return asShapePartial({
-      id: shapeId(action.id),
-      type: 'text',
-      x: action.x,
-      y: action.y,
-      meta: action.metadata ?? {},
-      props: {
-        w: action.width ?? 240,
-        color: normalizeTldrawColor(action.color) ?? 'black',
-        richText: toRichText(action.text),
-      },
-    })
-  }
-
-  if (action.action === 'create_arrow') {
-    return asShapePartial({
-      id: shapeId(action.id),
-      type: 'arrow',
-      x: action.x,
-      y: action.y,
-      meta: action.metadata ?? {},
-      props: {
-        color: normalizeTldrawColor(action.color) ?? 'black',
-        start: { x: 0, y: 0 },
-        end: { x: action.endX - action.x, y: action.endY - action.y },
-        richText: toRichText(action.text ?? ''),
-      },
-    })
-  }
-
-  if (action.action === 'create_line') {
-    return asShapePartial({
-      id: shapeId(action.id),
-      type: 'line',
-      x: action.x,
-      y: action.y,
-      meta: action.metadata ?? {},
-      props: {
-        color: normalizeTldrawColor(action.color) ?? 'black',
-        points: {
-          a1: { id: 'a1', index: 'a1', x: 0, y: 0 },
-          a2: { id: 'a2', index: 'a2', x: action.endX - action.x, y: action.endY - action.y },
-        },
-      },
-    })
-  }
-
-  if (action.action === 'create_freehand') {
+function shapeFromAction(action: CanvasAction): Record<string, unknown> | null {
+  if (!action.action.startsWith('create_')) return null
+  const id = (action as { id?: string }).id ?? `shape-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const common = { id, strokeColor: color('color' in action ? action.color : undefined), backgroundColor: fill('fill' in action ? action.fill : undefined), customData: 'metadata' in action ? action.metadata ?? {} : {} }
+  if (action.action === 'create_rectangle' || action.action === 'create_circle') return { ...common, type: action.action === 'create_circle' ? 'ellipse' : 'rectangle', x: action.x, y: action.y, width: action.width, height: action.height, label: action.text ? { text: action.text } : undefined }
+  if (action.action === 'create_text') return { ...common, type: 'text', x: action.x, y: action.y, text: action.text, fontSize: 20, width: action.width }
+  if (action.action === 'create_arrow' || action.action === 'create_line') return { ...common, type: action.action === 'create_arrow' ? 'arrow' : 'line', x: action.x, y: action.y, points: [[0, 0], [action.endX - action.x, action.endY - action.y]], label: action.text ? { text: action.text } : undefined }
+  if (action.action === 'create_freehand' || action.action === 'create_polygon') {
     const first = action.points[0]
     if (!first) return null
-    const localPoints = action.points.map((point) => ({
-      x: point.x - first.x,
-      y: point.y - first.y,
-      z: 0.5,
-    }))
-
-    return asShapePartial({
-      id: shapeId(action.id),
-      type: 'draw',
-      x: first.x,
-      y: first.y,
-      meta: action.metadata ?? {},
-      props: {
-        color: normalizeTldrawColor(action.color) ?? 'black',
-        fill: 'none',
-        dash: 'draw',
-        size: drawSizeFromStrokeWidth(action.strokeWidth),
-        segments: [{ type: 'free', path: b64Vecs.encodePoints(localPoints) }],
-        isComplete: true,
-        isClosed: false,
-        isPen: false,
-        scale: 1,
-        scaleX: 1,
-        scaleY: 1,
-      },
-    })
+    const points = action.points.map((point) => [point.x - first.x, point.y - first.y])
+    if (action.action === 'create_polygon') points.push(points[0])
+    return { ...common, type: 'line', x: first.x, y: first.y, points, strokeWidth: action.strokeWidth ?? 2 }
   }
-
-  if (action.action === 'create_polygon') {
-    const first = action.points[0]
-    if (!first) return null
-    const points = Object.fromEntries(
-      action.points.map((point, index) => {
-        const id = `a${index + 1}`
-        return [id, { id, index: id, x: point.x - first.x, y: point.y - first.y }]
-      }),
-    )
-
-    return asShapePartial({
-      id: shapeId(action.id),
-      type: 'line',
-      x: first.x,
-      y: first.y,
-      meta: action.metadata ?? {},
-      props: {
-        color: normalizeTldrawColor(action.color) ?? 'black',
-        spline: 'line',
-        points,
-      },
-    })
-  }
-
   return null
 }
 
-function objectExists(editor: Editor, id: string) {
-  return Boolean(editor.getShape(id as TLShapeId) ?? useAppStore.getState().embeddedObjects.find((object) => object.id === id))
-}
-
-function applyTldrawStyle(editor: Editor, id: string, style: CanvasStyle) {
-  const shape = editor.getShape(id as TLShapeId)
-  if (!shape) return false
-
-  const props: Record<string, unknown> = {}
-  const color = normalizeTldrawColor(style.color ?? style.stroke)
-  const fill = normalizeFill(style.fill)
-
-  if (color) props.color = color
-  if (fill) props.fill = fill
-  if (style.dash) props.dash = style.dash
-  if (style.font) props.font = style.font
-
-  editor.updateShapes([{ id: shape.id, type: shape.type, props } as ShapeUpdate])
+function reorder(editor: CanvasEditor, id: string, front: boolean) {
+  const elements = [...editor.getElements()]
+  const index = elements.findIndex((element) => element.id === id)
+  if (index < 0) return false
+  const [element] = elements.splice(index, 1)
+  if (front) elements.push(element)
+  else elements.unshift(element)
+  editor.api.updateScene({ elements })
   return true
 }
 
-function applyAction(editor: Editor, action: CanvasAction): CanvasActionResult {
-  const embeddedStore = useAppStore.getState()
-
+function applyAction(editor: CanvasEditor, action: CanvasAction): CanvasActionResult {
+  const store = useAppStore.getState()
   try {
-    const shape = createShapeFromAction(action)
-    if (shape) {
-      editor.createShapes([shape])
-      return { action: action.action, ok: true, objectIds: [String(shape.id)] }
+    const skeleton = shapeFromAction(action)
+    if (skeleton) {
+      const [element] = editor.createElements([skeleton] as never)
+      return { action: action.action, ok: true, objectIds: [element.id] }
     }
-
-    if (
-      action.action === 'create_file' ||
-      action.action === 'create_image' ||
-      action.action === 'create_pdf' ||
-      action.action === 'create_markdown' ||
-      action.action === 'create_webpage'
-    ) {
-      const object = createEmbeddedObject(action)
-      embeddedStore.addEmbeddedObject(object)
+    if (action.action.startsWith('create_')) {
+      const object = createEmbeddedObject(action as Extract<CanvasAction, { action: 'create_file' | 'create_image' | 'create_pdf' | 'create_markdown' | 'create_webpage' }>)
+      store.addEmbeddedObject(object)
       return { action: action.action, ok: true, objectIds: [object.id] }
     }
-
+    const element = editor.getElements().find((item) => item.id === ('id' in action ? action.id : ''))
+    const exists = Boolean(element || ('id' in action && store.embeddedObjects.some((object) => object.id === action.id)))
     if (action.action === 'move_object') {
-      const shapeToMove = editor.getShape(action.id as TLShapeId)
-      if (shapeToMove) {
-        editor.updateShapes([{ id: shapeToMove.id, type: shapeToMove.type, x: action.x, y: action.y } as ShapeUpdate])
-      } else {
-        embeddedStore.updateEmbeddedObject(action.id, { x: action.x, y: action.y })
-      }
-      return { action: action.action, ok: objectExists(editor, action.id), objectIds: [action.id] }
-    }
-
-    if (action.action === 'resize_object') {
-      const shapeToResize = editor.getShape(action.id as TLShapeId)
-      if (shapeToResize) {
-        editor.updateShapes([
-          { id: shapeToResize.id, type: shapeToResize.type, props: { w: action.width, h: action.height } } as ShapeUpdate,
-        ])
-      } else {
-        embeddedStore.updateEmbeddedObject(action.id, { w: action.width, h: action.height })
-      }
-      return { action: action.action, ok: objectExists(editor, action.id), objectIds: [action.id] }
-    }
-
-    if (action.action === 'update_style') {
-      return { action: action.action, ok: applyTldrawStyle(editor, action.id, action.style), objectIds: [action.id] }
-    }
-
-    if (action.action === 'relabel_object') {
-      const shapeToRelabel = editor.getShape(action.id as TLShapeId)
-      if (shapeToRelabel) {
-        editor.updateShapes([
-          { id: shapeToRelabel.id, type: shapeToRelabel.type, props: { richText: toRichText(action.text) } } as ShapeUpdate,
-        ])
-      } else {
-        embeddedStore.updateEmbeddedObject(action.id, { title: action.text })
-      }
-      return { action: action.action, ok: objectExists(editor, action.id), objectIds: [action.id] }
-    }
-
-    if (action.action === 'update_webpage') {
-      embeddedStore.updateEmbeddedObject(action.id, { url: action.url, title: action.title })
-      return { action: action.action, ok: objectExists(editor, action.id), objectIds: [action.id] }
-    }
-
-    if (action.action === 'update_metadata') {
-      const shapeToUpdate = editor.getShape(action.id as TLShapeId)
-      if (shapeToUpdate) {
-        editor.updateShapes([{ id: shapeToUpdate.id, type: shapeToUpdate.type, meta: action.metadata } as ShapeUpdate])
-      } else {
-        embeddedStore.updateEmbeddedObject(action.id, { metadata: action.metadata })
-      }
-      return { action: action.action, ok: objectExists(editor, action.id), objectIds: [action.id] }
-    }
-
-    if (action.action === 'delete_object') {
-      if (editor.getShape(action.id as TLShapeId)) editor.deleteShapes([action.id as TLShapeId])
-      else embeddedStore.deleteEmbeddedObject(action.id)
-      return { action: action.action, ok: true, objectIds: [action.id] }
-    }
-
-    if (action.action === 'duplicate_object') {
-      if (editor.getShape(action.id as TLShapeId)) editor.duplicateShapes([action.id as TLShapeId], { x: 32, y: 32 })
-      else embeddedStore.duplicateEmbeddedObject(action.id)
-      return { action: action.action, ok: true, objectIds: [action.id] }
-    }
-
-    if (action.action === 'bring_to_front') {
-      editor.bringToFront([action.id as TLShapeId])
-      return { action: action.action, ok: true, objectIds: [action.id] }
-    }
-
-    if (action.action === 'send_to_back') {
-      editor.sendToBack([action.id as TLShapeId])
-      return { action: action.action, ok: true, objectIds: [action.id] }
-    }
-
-    if (action.action === 'group_objects') {
-      const ids = action.ids.map((id) => id as TLShapeId)
-      editor.groupShapes(ids, action.id ? { groupId: shapeId(action.id) } : undefined)
-      return { action: action.action, ok: true, objectIds: action.ids }
-    }
-
-    if (action.action === 'ungroup_objects') {
-      editor.ungroupShapes(action.ids.map((id) => id as TLShapeId))
-      return { action: action.action, ok: true, objectIds: action.ids }
-    }
-
-    if (action.action === 'select_objects') {
-      const tldrawIds = action.ids.filter((id) => editor.getShape(id as TLShapeId)).map((id) => id as TLShapeId)
-      const embeddedIdToSelect = action.ids.find((id) => embeddedStore.embeddedObjects.some((object) => object.id === id)) ?? null
-      editor.select(...tldrawIds)
-      embeddedStore.setSelectedEmbeddedObjectId(embeddedIdToSelect)
-      return { action: action.action, ok: true, objectIds: action.ids }
-    }
-
-    return { action: action.action, ok: false, objectIds: [], error: 'Unsupported canvas action' }
+      if (element) editor.updateElements((item) => item.id === action.id ? { ...item, x: action.x, y: action.y } : item)
+      else store.updateEmbeddedObject(action.id, { x: action.x, y: action.y })
+    } else if (action.action === 'resize_object') {
+      if (element) editor.updateElements((item) => item.id === action.id ? { ...item, width: action.width, height: action.height } : item)
+      else store.updateEmbeddedObject(action.id, { w: action.width, h: action.height })
+    } else if (action.action === 'update_style') {
+      if (!element) return { action: action.action, ok: false, objectIds: [action.id], error: 'Object not found' }
+      editor.updateElements((item) => item.id === action.id ? { ...item, strokeColor: color(action.style.color ?? action.style.stroke ?? item.strokeColor), backgroundColor: fill(action.style.fill) ?? item.backgroundColor, strokeWidth: action.style.strokeWidth ?? item.strokeWidth, opacity: action.style.opacity ?? item.opacity } : item)
+    } else if (action.action === 'relabel_object') {
+      if (element && element.type === 'text') editor.updateElements((item) => item.id === action.id ? { ...item, text: action.text } : item)
+      else if (!element) store.updateEmbeddedObject(action.id, { title: action.text })
+      else return { action: action.action, ok: false, objectIds: [action.id], error: 'Only text elements can be relabelled' }
+    } else if (action.action === 'update_webpage') store.updateEmbeddedObject(action.id, { url: action.url, title: action.title })
+    else if (action.action === 'update_metadata') {
+      if (element) editor.updateElements((item) => item.id === action.id ? { ...item, customData: action.metadata } : item)
+      else store.updateEmbeddedObject(action.id, { metadata: action.metadata })
+    } else if (action.action === 'delete_object') {
+      if (element) editor.removeElements([action.id]); else store.deleteEmbeddedObject(action.id)
+    } else if (action.action === 'duplicate_object') {
+      if (element) editor.createElements([{ ...element, id: `${element.id}-copy-${Date.now()}`, x: element.x + 32, y: element.y + 32 }] as never)
+      else store.duplicateEmbeddedObject(action.id)
+    } else if (action.action === 'bring_to_front') reorder(editor, action.id, true)
+    else if (action.action === 'send_to_back') reorder(editor, action.id, false)
+    else if (action.action === 'group_objects') {
+      const groupId = action.id ?? `group-${Date.now()}`
+      const ids = new Set(action.ids)
+      editor.updateElements((item) => ids.has(item.id) ? { ...item, groupIds: [...item.groupIds, groupId] } : item)
+    } else if (action.action === 'ungroup_objects') {
+      const ids = new Set(action.ids)
+      editor.updateElements((item) => ids.has(item.id) ? { ...item, groupIds: [] } : item)
+    } else if (action.action === 'select_objects') {
+      editor.select(action.ids.filter((id) => editor.getElements().some((element) => element.id === id)))
+      store.setSelectedEmbeddedObjectId(action.ids.find((id) => store.embeddedObjects.some((object) => object.id === id)) ?? null)
+    } else return { action: action.action, ok: false, objectIds: [], error: 'Unsupported canvas action' }
+    return { action: action.action, ok: exists || action.action === 'select_objects' || action.action.startsWith('group_') || action.action.startsWith('ungroup_'), objectIds: 'id' in action ? (action.id ? [action.id] : []) : action.ids }
   } catch (error) {
     return { action: action.action, ok: false, objectIds: [], error: error instanceof Error ? error.message : String(error) }
   }
 }
 
-export function getCanvasState(editor: Editor): CanvasState {
+export function getCanvasState(editor: CanvasEditor): CanvasState {
+  const elements = editor.getElements()
   const embeddedObjects = useAppStore.getState().embeddedObjects
-  const selectedEmbeddedObjectId = useAppStore.getState().selectedEmbeddedObjectId
-  const shapes = editor.getCurrentPageShapes()
-  const childrenByParent = new Map<string, string[]>()
-
-  shapes.forEach((shape) => {
-    if ('parentId' in shape && shape.parentId) {
-      const parentId = String(shape.parentId)
-      childrenByParent.set(parentId, [...(childrenByParent.get(parentId) ?? []), String(shape.id)])
-    }
-  })
-
-  const shapeSnapshots: CanvasObjectSnapshot[] = shapes.map((shape, layerIndex) => {
-    const props = shape.props as Record<string, unknown>
-
-    return {
-      id: String(shape.id),
-      source: 'tldraw',
-      kind: kindFromShape(shape),
-      type: shape.type,
-      bounds: shapeBounds(editor, shape),
-      rotation: Number(shape.rotation ?? 0),
-      layerIndex,
-      parentId: 'parentId' in shape ? String(shape.parentId) : undefined,
-      text: shapeText(editor, props),
-      url: propString(props, 'url'),
-      style: styleFromShape(props),
-      relationships: shapeRelationships(shape, childrenByParent.get(String(shape.id)) ?? []),
-      metadata: { ...shape.meta },
-      raw: shape,
-    }
-  })
-
-  const embeddedSnapshots: CanvasObjectSnapshot[] = embeddedObjects.map((object, index) => ({
-    id: object.id,
-    source: 'embedded',
-    kind: embeddedKind(object.kind, object.mimeType),
-    type: `embed:${object.kind}`,
-    bounds: { x: object.x, y: object.y, w: object.w, h: object.h },
-    layerIndex: shapes.length + index,
-    text: object.url ?? object.title,
-    url: object.url,
-    mimeType: object.mimeType,
-    size: object.size,
-    title: object.title,
-    style: {},
-    relationships: [],
-    metadata: object.metadata ?? {},
-    raw: object,
+  const snapshots: CanvasObjectSnapshot[] = elements.map((element, layerIndex) => ({
+    id: element.id, source: 'tldraw', kind: kindFromElement(element), type: element.type,
+    bounds: { x: element.x, y: element.y, w: element.width, h: element.height }, rotation: element.angle,
+    layerIndex, groupId: element.groupIds.at(-1), text: elementText(element), style: { color: element.strokeColor, fill: element.backgroundColor, stroke: element.strokeColor, strokeWidth: element.strokeWidth, opacity: element.opacity, dash: element.strokeStyle }, relationships: relationships(element), metadata: metadata(element), raw: element,
   }))
-
-  const objects = [...shapeSnapshots, ...embeddedSnapshots]
-  const screenBounds = editor.getViewportScreenBounds()
-  const selectedObjectIds = [
-    ...editor.getSelectedShapeIds().map(String),
-    ...(selectedEmbeddedObjectId ? [selectedEmbeddedObjectId] : []),
-  ]
-
-  return {
-    schemaVersion: 'pythios.canvas.v1',
-    capturedAt: new Date().toISOString(),
-    viewport: {
-      ...editor.getCamera(),
-      screenBounds: { x: screenBounds.x, y: screenBounds.y, w: screenBounds.w, h: screenBounds.h },
-    },
-    objects,
-    selectedObjectIds,
-    visibleObjectIds: objects.map((object) => object.id),
-    sceneGraph: buildSceneGraph(objects),
-    embeddedObjects,
-    metadata: {
-      pageId: String(editor.getCurrentPageId()),
-      shapeCount: shapes.length,
-      embeddedObjectCount: embeddedObjects.length,
-    },
-  }
+  const embedded = embeddedObjects.map((object, index) => ({ id: object.id, source: 'embedded' as const, kind: embeddedKind(object.kind, object.mimeType), type: `embed:${object.kind}`, bounds: { x: object.x, y: object.y, w: object.w, h: object.h }, layerIndex: elements.length + index, text: object.url ?? object.title, url: object.url, mimeType: object.mimeType, size: object.size, title: object.title, style: {}, relationships: [], metadata: object.metadata ?? {}, raw: object }))
+  const objects = [...snapshots, ...embedded]
+  const viewport = editor.getViewport()
+  const selectedObjectIds = [...editor.getSelectedIds(), ...(useAppStore.getState().selectedEmbeddedObjectId ? [useAppStore.getState().selectedEmbeddedObjectId!] : [])]
+  return { schemaVersion: 'pythios.canvas.v1', capturedAt: new Date().toISOString(), viewport, objects, selectedObjectIds, visibleObjectIds: objects.map((object) => object.id), sceneGraph: buildSceneGraph(objects), embeddedObjects, metadata: { pageId: 'excalidraw-scene', shapeCount: elements.length, embeddedObjectCount: embeddedObjects.length } }
 }
 
-export function getSceneGraph(editor: Editor) {
-  return getCanvasState(editor).sceneGraph
-}
-
-export function getSelectedObjects(editor: Editor) {
-  const state = getCanvasState(editor)
-  const selectedIds = new Set(state.selectedObjectIds)
-  return state.objects.filter((object) => selectedIds.has(object.id))
-}
-
-export function getVisibleObjects(editor: Editor) {
-  return getCanvasState(editor).objects
-}
-
-export function applyCanvasActions(editor: Editor, actions: CanvasAction[]): CanvasActionBatchResult {
-  return {
-    schemaVersion: 'pythios.canvas.actions.v1',
-    appliedAt: new Date().toISOString(),
-    results: actions.map((action) => applyAction(editor, action)),
-  }
-}
+export function getSceneGraph(editor: CanvasEditor) { return getCanvasState(editor).sceneGraph }
+export function getSelectedObjects(editor: CanvasEditor) { const state = getCanvasState(editor); const ids = new Set(state.selectedObjectIds); return state.objects.filter((object) => ids.has(object.id)) }
+export function getVisibleObjects(editor: CanvasEditor) { return getCanvasState(editor).objects }
+export function applyCanvasActions(editor: CanvasEditor, actions: CanvasAction[]): CanvasActionBatchResult { return { schemaVersion: 'pythios.canvas.actions.v1', appliedAt: new Date().toISOString(), results: actions.map((action) => applyAction(editor, action)) } }

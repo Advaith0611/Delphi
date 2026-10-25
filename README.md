@@ -31,7 +31,7 @@ Instead of forcing users to describe ideas linearly through text, Spatial AI Int
 * TypeScript
 * Vite
 * TailwindCSS
-* tldraw
+* Excalidraw (MIT licensed; no production license key)
 * Zustand
 * Framer Motion
 
@@ -152,7 +152,7 @@ Start Ollama locally before running the backend.
 ```bash
 cd backend
 python3 -m pip install -r requirements.txt
-python3 -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Backend runs on:
@@ -177,6 +177,8 @@ Frontend runs on:
 
 ```txt
 http://localhost:5173
+
+The development frontend calls the local backend at `http://localhost:8000`. The production build calls the Render backend configured in `frontend/.env.production`. If the backend is unavailable, the browser-only fallback generator keeps preview generation working.
 ```
 
 ---

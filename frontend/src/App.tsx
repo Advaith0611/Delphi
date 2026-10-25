@@ -1,4 +1,3 @@
-import 'tldraw/tldraw.css'
 import { Toaster } from 'react-hot-toast'
 import { CanvasWorkspace } from './canvas/CanvasWorkspace'
 import { GeneratedRenderer } from './components/GeneratedRenderer'

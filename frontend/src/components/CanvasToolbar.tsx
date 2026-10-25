@@ -8,7 +8,6 @@ import {
   X,
 } from 'lucide-react'
 import { memo, useCallback, useRef, useState } from 'react'
-import type { Editor } from 'tldraw'
 import toast from 'react-hot-toast'
 import { generateInterface } from '../ai/api'
 import { applyCanvasActions, getCanvasState } from '../canvas/aiCanvasBridge'
@@ -16,10 +15,11 @@ import { getSerializableShapes } from '../canvas/shapes'
 import { captureCanvasVisualContext } from '../canvas/visualContext'
 import { useAppStore } from '../store/useAppStore'
 import { useRenderCounter } from '../canvas/performanceInstrumentation'
+import type { CanvasEditor } from '../canvas/excalidraw'
 import type { EmbeddedCanvasObject, EmbeddedCanvasObjectKind } from '../types'
 
 interface CanvasToolbarProps {
-  editor: Editor
+  editor: CanvasEditor
 }
 
 function createEmbeddedObjectId() {
@@ -75,7 +75,7 @@ function CanvasToolbarComponent({ editor }: CanvasToolbarProps) {
   const setStatus = useAppStore((state) => state.setStatus)
 
   const getDropPoint = useCallback(() => {
-    const center = editor.screenToPage(editor.getViewportScreenCenter())
+    const center = editor.getViewportCenterScene()
     return { x: center.x - 180, y: center.y - 120 }
   }, [editor])
 
@@ -159,8 +159,13 @@ function CanvasToolbarComponent({ editor }: CanvasToolbarProps) {
         setGeneratedUI(response.generatedUI)
       }
 
-      setStatus(`AI Core ran: ${appliedCount}/${actions.length} action${actions.length === 1 ? '' : 's'} applied`)
-      toast.success(actions.length ? 'AI Core actions applied' : 'AI Core ran')
+      const usedLocalFallback = response.generatedUI?.source === 'local'
+      setStatus(
+        usedLocalFallback
+          ? 'Local fallback ran; connect the AI backend for canvas actions'
+          : `AI Core ran: ${appliedCount}/${actions.length} action${actions.length === 1 ? '' : 's'} applied`,
+      )
+      toast.success(usedLocalFallback ? 'Local fallback generated the preview' : actions.length ? 'AI Core actions applied' : 'AI Core ran')
     } catch (error) {
       console.error(error)
       const message = errorMessage(error)

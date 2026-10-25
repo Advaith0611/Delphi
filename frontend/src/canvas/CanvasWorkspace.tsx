@@ -1,53 +1,38 @@
+import { Excalidraw } from '@excalidraw/excalidraw'
+import '@excalidraw/excalidraw/index.css'
 import { memo, useCallback, useRef, useState } from 'react'
-import { Tldraw, type Editor } from 'tldraw'
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { CanvasHints } from '../components/CanvasHints'
 import { CanvasToolbar } from '../components/CanvasToolbar'
+import { DrawingToolbar } from '../components/DrawingToolbar'
 import { EmbeddedCanvasLayer } from './EmbeddedCanvasLayer'
-import {
-  useBoundEditorHistory,
-  useDisableTldrawPersistenceCleanup,
-  usePerformanceInstrumentation,
-  useRenderCounter,
-} from './performanceInstrumentation'
+import { CanvasEditor } from './excalidraw'
 import { useCanvasSizeGuard } from './useCanvasSizeGuard'
 
 function CanvasWorkspaceComponent() {
-  useRenderCounter('CanvasWorkspace')
-
   const containerRef = useRef<HTMLElement | null>(null)
-  const editorRef = useRef<Editor | null>(null)
-  const [editor, setEditor] = useState<Editor | null>(null)
+  const [editor, setEditor] = useState<CanvasEditor | null>(null)
 
   useCanvasSizeGuard(containerRef)
-  useDisableTldrawPersistenceCleanup()
-  usePerformanceInstrumentation(editorRef)
-  useBoundEditorHistory(editorRef)
 
-  const handleMount = useCallback((mountedEditor: Editor) => {
-    editorRef.current = mountedEditor
-    setEditor(mountedEditor)
-    mountedEditor.setCurrentTool('draw')
-
-    return () => {
-      editorRef.current = null
-      setEditor(null)
-    }
+  const handleApi = useCallback((api: ExcalidrawImperativeAPI) => {
+    if (containerRef.current) setEditor(new CanvasEditor(api, containerRef.current))
   }, [])
 
   return (
     <section className="canvas-stage" ref={containerRef}>
-      <div className="tldraw-viewport">
-        <Tldraw
-          className="pythios-tldraw"
-          autoFocus
-          licenseKey={import.meta.env.VITE_TLDRAW_LICENSE_KEY}
-          onMount={handleMount}
+      <div className="excalidraw-viewport">
+        <Excalidraw
+          excalidrawAPI={handleApi}
+          initialData={{ appState: { viewBackgroundColor: '#f7efe3' } }}
+          UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false } }}
         />
       </div>
       {editor ? (
         <div className="canvas-overlays">
           <EmbeddedCanvasLayer editor={editor} />
           <CanvasToolbar editor={editor} />
+          <DrawingToolbar editor={editor} />
           <CanvasHints />
         </div>
       ) : null}

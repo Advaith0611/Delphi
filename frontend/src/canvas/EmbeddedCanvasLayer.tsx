@@ -1,11 +1,11 @@
 import { Copy, ExternalLink, FileText, RefreshCw, Trash2 } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import type { Editor } from 'tldraw'
+import type { CanvasEditor } from './excalidraw'
 import { useAppStore } from '../store/useAppStore'
 import type { EmbeddedCanvasObject } from '../types'
 
 interface EmbeddedCanvasLayerProps {
-  editor: Editor
+  editor: CanvasEditor
 }
 
 interface DragState {
@@ -191,14 +191,14 @@ function EmbeddedContent({ object }: { object: EmbeddedCanvasObject }) {
   return <FileSummary object={object} />
 }
 
-function EmbeddedWindow({ editor, object, zoom }: { editor: Editor; object: EmbeddedCanvasObject; zoom: number }) {
+function EmbeddedWindow({ editor, object, zoom }: { editor: CanvasEditor; object: EmbeddedCanvasObject; zoom: number }) {
   const selectedEmbeddedObjectId = useAppStore((state) => state.selectedEmbeddedObjectId)
   const setSelectedEmbeddedObjectId = useAppStore((state) => state.setSelectedEmbeddedObjectId)
   const updateEmbeddedObject = useAppStore((state) => state.updateEmbeddedObject)
   const deleteEmbeddedObject = useAppStore((state) => state.deleteEmbeddedObject)
   const duplicateEmbeddedObject = useAppStore((state) => state.duplicateEmbeddedObject)
   const isSelected = selectedEmbeddedObjectId === object.id
-  const screenPoint = editor.pageToScreen({ x: object.x, y: object.y })
+  const screenPoint = editor.sceneToScreen({ x: object.x, y: object.y })
 
   const style = {
     left: screenPoint.x,
@@ -283,19 +283,17 @@ function EmbeddedCanvasLayerComponent({ editor }: EmbeddedCanvasLayerProps) {
   const embeddedObjects = useAppStore((state) => state.embeddedObjects)
   const setSelectedEmbeddedObjectId = useAppStore((state) => state.setSelectedEmbeddedObjectId)
   const [, setViewportTick] = useState(0)
-  const zoom = editor.getCamera().z
+  const zoom = editor.getViewport().z
 
   useEffect(() => {
     const updateViewport = () => setViewportTick((tick) => tick + 1)
 
-    editor.on('frame', updateViewport)
-    editor.on('change', updateViewport)
-    editor.on('resize', updateViewport)
+    const stopChanges = editor.api.onChange(updateViewport)
+    const stopScroll = editor.api.onScrollChange(updateViewport)
 
     return () => {
-      editor.off('frame', updateViewport)
-      editor.off('change', updateViewport)
-      editor.off('resize', updateViewport)
+      stopChanges()
+      stopScroll()
     }
   }, [editor])
 

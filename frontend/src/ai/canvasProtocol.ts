@@ -1,5 +1,7 @@
 import type { EmbeddedCanvasObject } from '../types'
 
+// Kept as "tldraw" on the wire for compatibility with the existing backend
+// protocol. The frontend renderer is now Excalidraw.
 export type CanvasObjectSource = 'tldraw' | 'embedded'
 
 export type CanvasObjectKind =

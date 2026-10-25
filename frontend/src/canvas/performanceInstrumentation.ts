@@ -1,5 +1,5 @@
 import { useEffect, type RefObject } from 'react'
-import type { Editor } from 'tldraw'
+import type { CanvasEditor } from './excalidraw'
 
 const renderCounts = new Map<string, number>()
 const runtimeCounters = {
@@ -64,27 +64,14 @@ function getMemoryMegabytes() {
   }
 }
 
-function getHistorySummary(editor: Editor | null) {
+function getHistorySummary(editor: CanvasEditor | null) {
   if (!editor) return null
 
-  const candidate = editor as unknown as {
-    history?: {
-      getNumUndos?: () => number
-      getNumRedos?: () => number
-    }
-    getCurrentPageShapes?: () => unknown[]
-    getSelectedShapeIds?: () => unknown[]
-    disposables?: Set<unknown>
-  }
-
   return {
-    shapeCount: candidate.getCurrentPageShapes?.().length ?? 0,
-    selectedCount: candidate.getSelectedShapeIds?.().length ?? 0,
-    historyDepth: {
-      undos: candidate.history?.getNumUndos?.() ?? null,
-      redos: candidate.history?.getNumRedos?.() ?? null,
-    },
-    editorDisposables: candidate.disposables?.size ?? null,
+    shapeCount: editor.getElements().length,
+    selectedCount: editor.getSelectedIds().length,
+    historyDepth: { undos: null, redos: null },
+    editorDisposables: null,
   }
 }
 
@@ -161,7 +148,7 @@ export function useDisableTldrawPersistenceCleanup() {
   }, [])
 }
 
-export function usePerformanceInstrumentation(editorRef: RefObject<Editor | null>) {
+export function usePerformanceInstrumentation(editorRef: RefObject<CanvasEditor | null>) {
   useEffect(() => {
     installRuntimeDiagnostics()
     console.info('Pythios performance instrumentation active. Tldraw persistence and default tldraw UI are disabled.')
@@ -195,24 +182,13 @@ export function usePerformanceInstrumentation(editorRef: RefObject<Editor | null
   }, [editorRef])
 }
 
-export function useBoundEditorHistory(editorRef: RefObject<Editor | null>, maxUndoDepth = 12) {
+export function useBoundEditorHistory(editorRef: RefObject<CanvasEditor | null>, maxUndoDepth = 12) {
   useEffect(() => {
     const interval = window.setInterval(() => {
       const editor = editorRef.current
       if (!editor) return
 
-      const history = (editor as unknown as {
-        history?: {
-          getNumUndos?: () => number
-          clear?: () => void
-        }
-      }).history
-
-      const undoDepth = history?.getNumUndos?.() ?? 0
-      if (undoDepth > maxUndoDepth) {
-        history?.clear?.()
-        console.info('Pythios cleared tldraw undo history to bound memory.', { undoDepth, maxUndoDepth })
-      }
+      void maxUndoDepth
     }, 8000)
 
     return () => window.clearInterval(interval)
