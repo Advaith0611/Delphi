@@ -88,6 +88,15 @@
 .panel-header h2 { margin:5px 0 0; color:var(--text); font:600 26px/1.08 var(--display); letter-spacing:-.06em; }
 .panel-summary { margin:12px 0 0; color:var(--muted); line-height:1.45; }
 .panel-meta { display:flex; justify-content:space-between; gap:12px; margin:16px 0 18px; color:var(--muted); font:400 12px var(--mono); }
+.project-control, .agent-activity { margin:0 0 16px; padding:12px; border:1px solid var(--line); border-radius:8px; background:rgba(118,80,31,.09); }
+.project-control label, .agent-activity > span { display:block; margin-bottom:8px; color:var(--orange); font:500 11px var(--mono); text-transform:uppercase; letter-spacing:.08em; }
+.project-control > div { display:flex; gap:8px; }
+.project-control input { min-width:0; flex:1; height:36px; border:1px solid var(--line); border-radius:7px; padding:0 10px; background:var(--ink); color:var(--text); font:500 14px var(--mono); letter-spacing:.1em; outline:none; text-transform:lowercase; }
+.project-control input:focus { border-color:var(--gold); box-shadow:0 0 0 2px rgba(214,162,76,.16); }
+.project-control a { width:36px; height:36px; border:1px solid var(--line); border-radius:7px; display:inline-flex; align-items:center; justify-content:center; color:var(--gold); background:var(--ink-soft); }
+.project-control a:hover { color:var(--orange); border-color:var(--gold); }
+.project-control p { margin:8px 0 0; color:var(--muted); font-size:12px; line-height:1.35; }
+.agent-activity ol { display:grid; gap:6px; max-height:190px; overflow:auto; margin:0; padding-left:20px; color:var(--muted); font:400 12px/1.35 var(--mono); }
 .preview-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; padding-bottom:24px; }
 .preview-card { min-height:126px; border:1px solid var(--line); border-radius:8px; background:linear-gradient(145deg,rgba(23,18,14,.98),rgba(13,11,9,.92)); padding:15px; transition:transform 160ms ease,border-color 160ms ease,background 160ms ease; }
 .preview-card:hover { transform:translateY(-2px); border-color:var(--gold-soft); background:linear-gradient(145deg,rgba(31,23,16,.98),rgba(13,11,9,.95)); }

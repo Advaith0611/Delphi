@@ -73,10 +73,20 @@ export interface GenerationRequest {
   visualContext?: CanvasVisualContext
   prompt?: string
   selectedOnly?: boolean
+  projectId?: string
+}
+
+export interface ProjectBuildInfo {
+  projectId: string
+  url?: string | null
+  status: 'created' | 'updated' | 'failed'
+  activity: string[]
+  error?: string | null
 }
 
 export interface GenerationResponse {
   actionBatch: CanvasActionBatch
   generatedUI?: GeneratedUI | null
   source: 'ai-core'
+  project?: ProjectBuildInfo | null
 }

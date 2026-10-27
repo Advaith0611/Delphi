@@ -14,7 +14,7 @@ async def health():
 
 @router.post("/generate", response_model=GenerateResponse, response_model_exclude_none=True)
 async def generate(request: GenerateRequest):
-    return run_ai_core(request)
+    return await run_ai_core(request)
 
 
 @router.get("/canvas/protocol", response_model=CanvasProtocolResponse)

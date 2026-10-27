@@ -23,6 +23,15 @@ class GenerateRequest(BaseModel):
     visualContext: CanvasVisualContext | None = None
     prompt: str | None = None
     selectedOnly: bool = False
+    projectId: str | None = Field(default=None, pattern=r"^[a-z0-9]{6}$")
+
+
+class ProjectBuildInfo(BaseModel):
+    projectId: str
+    url: str | None = None
+    status: Literal["created", "updated", "failed"]
+    activity: list[str] = Field(default_factory=list)
+    error: str | None = None
 
 
 class GeneratedComponent(BaseModel):
@@ -65,6 +74,7 @@ class GenerateResponse(BaseModel):
     actionBatch: CanvasActionBatch = Field(default_factory=CanvasActionBatch)
     generatedUI: GeneratedUI | None = None
     source: Literal["ai-core"] = "ai-core"
+    project: ProjectBuildInfo | None = None
 
 
 class HealthResponse(BaseModel):

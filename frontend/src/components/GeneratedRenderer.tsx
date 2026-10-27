@@ -1,4 +1,4 @@
-import { ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Columns3, Gauge, ListChecks, Table2, TrendingUp } from 'lucide-react'
+import { ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Columns3, ExternalLink, Gauge, ListChecks, Table2, TrendingUp } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useRenderCounter } from '../canvas/performanceInstrumentation'
 import { useAppStore } from '../store/useAppStore'
@@ -154,6 +154,10 @@ export function GeneratedRenderer() {
   const status = useAppStore((state) => state.status)
   const isSidebarCollapsed = useAppStore((state) => state.isSidebarCollapsed)
   const setSidebarCollapsed = useAppStore((state) => state.setSidebarCollapsed)
+  const projectId = useAppStore((state) => state.projectId)
+  const projectUrl = useAppStore((state) => state.projectUrl)
+  const agentActivity = useAppStore((state) => state.agentActivity)
+  const setProjectId = useAppStore((state) => state.setProjectId)
 
   return (
     <aside className="generated-panel" aria-label="Generated interface preview">
@@ -169,7 +173,7 @@ export function GeneratedRenderer() {
       </button>
       <div className="panel-header">
         <div>
-          <span>Live generated interface</span>
+          <span>{projectId ? `Active project · ${projectId}` : 'Live generated interface'}</span>
           <h2>{generatedUI?.title ?? 'Draw a layout, then generate'}</h2>
         </div>
         <div className="source-pill">{generatedUI?.source ?? 'ready'}</div>
@@ -181,6 +185,33 @@ export function GeneratedRenderer() {
         <span>{status}</span>
         <span>{lastShapeCount} shapes</span>
       </div>
+      <section className="project-control" aria-label="Project workspace">
+        <label htmlFor="project-id">Project ID</label>
+        <div>
+          <input
+            id="project-id"
+            value={projectId}
+            onChange={(event) => setProjectId(event.target.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 6))}
+            placeholder="new project"
+            maxLength={6}
+            spellCheck={false}
+          />
+          {projectUrl ? (
+            <a href={projectUrl} target="_blank" rel="noreferrer" title="Open published project">
+              <ExternalLink size={16} />
+            </a>
+          ) : null}
+        </div>
+        <p>Leave empty to initialize one project. Enter an existing six-character code to edit only that project.</p>
+      </section>
+      {agentActivity.length ? (
+        <section className="agent-activity" aria-label="Coding agent activity">
+          <span>Agent activity</span>
+          <ol>
+            {agentActivity.map((entry, index) => <li key={`${entry}-${index}`}>{entry}</li>)}
+          </ol>
+        </section>
+      ) : null}
       <motion.div className="preview-grid" layout>
         {(generatedUI?.components ?? []).map((component, index) => (
           <motion.div

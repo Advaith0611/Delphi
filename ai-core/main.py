@@ -5,6 +5,9 @@ from pathlib import Path
 from typing import Any
 from google import genai
 from google.genai import types
+from dotenv import load_dotenv
+
+load_dotenv()
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AI_CORE_DIR = Path(__file__).resolve().parent
@@ -19,6 +22,7 @@ from dotenv import load_dotenv
 from groq import Groq
 
 from app.services.file_ingestion import process_canvas_file
+from app.services.project_builder import ProjectBuilder
 
 load_dotenv()
 
@@ -66,178 +70,24 @@ def model(canvas_input: dict) -> str:
     context = {k: v for k, v in canvas_input.items() if k != "screenshot"}
 
     client = genai.Client(
-        api_key=os.environ["GEMINI_API_KEY"]
+        api_key=os.environ.get("GEMINI_API_KEY")
     )
 
     prompt = f"""
 You are Pythios.
 
-Your purpose is not merely to describe what is on the canvas.
+You convert a whiteboard into a concise implementation brief for one coding
+agent. Use both the screenshot and the structured canvas data.
 
-Your purpose is to determine the most useful thing that can be created for the user.
+Return plain text with exactly these sections:
 
-You are given:
+ARTIFACT TYPE: website, simulation, presentation, dashboard, interactive demo, or other
+USER GOAL: one or two sentences
+BUILD BRIEF: the visual/content/interaction requirements the agent should implement
+SUCCESS CRITERIA: short concrete checks for a finished artifact
 
-1. Structured canvas data.
-2. A screenshot of the current canvas.
-
-Use BOTH sources together.
-
-The screenshot provides:
-
-* drawings
-* diagrams
-* sketches
-* layouts
-* handwritten notes
-* visual relationships
-* whiteboard structure
-
-The structured canvas data provides:
-
-* exact text
-* object metadata
-* webpages
-* files
-* images
-* PDFs
-* embedded content
-
-Your task:
-
-First determine what the user is trying to accomplish.
-
-Then determine what would help them most.
-
-Do NOT simply repeat the problem.
-
-Think creatively.
-
-Describe what you would build for the user. Not only apps but diagrams and visuals as well
-
-If the user is solving a problem:
-
-* generate tools
-* simulations
-* calculators
-* visual explanations
-* interactive learning experiences
-* automated workflows
-* reusable systems
-
-If the user is designing software:
-
-* generate software architecture
-* implementation plans
-* product features
-* deployment plans
-
-If the user is brainstorming:
-
-* generate new ideas
-* extensions
-* improvements
-* alternative approaches
-
-If the user is learning:
-
-* generate educational artifacts
-* visualizations
-* interactive demonstrations
-* practice systems
-
-Always prefer creating something useful over merely describing something.
-
-For example:
-
-Input:
-Triangle with base 12cm and height 8cm.
-
-Bad output:
-"Calculate area of triangle."
-
-Good output:
-
-* Build an interactive triangle-area calculator.
-* Add draggable triangle vertices.
-* Add sliders for base and height.
-* Visualize the area formula updating in real time.
-* Show how changing dimensions affects area.
-* Generate practice questions automatically.
-* Include a step-by-step explanation mode.
-
-Input:
-Startup landing page sketch.
-
-Good output:
-
-* Generate production-ready landing page.
-* Create responsive React frontend.
-* Add analytics dashboard.
-* Generate branding assets.
-* Deploy preview automatically.
-
-Input:
-Machine-learning diagram.
-
-Good output:
-
-* Build interactive architecture visualization.
-* Generate training pipeline.
-* Create evaluation dashboard.
-* Produce implementation roadmap.
-
-Output format:
-
-USER INTENT: <what the user ultimately wants>
-
-MOST VALUABLE ARTIFACT: <the single most useful thing Pythios could create>
-
-IMPLEMENTATION TASKS:
-
-[PHASE 1]
-
-* task
-* task
-* task
-
-[PHASE 2]
-
-* task
-* task
-* task
-
-[PHASE 3]
-
-* task
-* task
-* task
-
-OPPORTUNITIES:
-
-* innovative idea
-* innovative idea
-* innovative idea
-
-TECHNICAL NOTES:
-
-* note
-* note
-* note
-
-TO DO:
-
-[] Primary task(build app or MVA)
-[] Secondary task(draw and generate diagrams, images or videos)
-[] Tertiary task(generate other artifacts such as tables files or code snippets)
-
-
-Do not explain your reasoning.
-
-Do not merely summarize.
-
-Always think:
-"What could I build that would be genuinely useful for this user?"
+Do not produce phases, research plans, deployment plans, alternatives, or a
+long explanation. Do not claim the artifact has been built.
 
 Canvas Data:
 
@@ -260,7 +110,7 @@ Canvas Data:
         contents=contents,
         config=types.GenerateContentConfig(
             temperature=0.1,
-            max_output_tokens=500,
+            max_output_tokens=900,
         ),
     )
 
@@ -372,25 +222,48 @@ def run(
 ):
     visual_context = ensure_visual_context(canvas_state, visual_context)
     canvas_input = read_everything_on_canvas(canvas_state, visual_context)
-    actions = [
-    ]
-    summary = (
-        f"Objects: {canvas_input['object_count']}\n"
-        f"Selected: {canvas_input['selected_count']}\n"
-        f"Files: {len(canvas_input['files'])}\n"
-        f"Webpages: {len(canvas_input['webpages'])}\n"
-        f"Screenshot: {canvas_input['screenshot'] is not None}"
-    )
+    actions = []
     try:
-        answer = model(canvas_input)
+        brief = model(canvas_input)
     except Exception as error:
-        answer = f"Canvas read succeeded. AI summary unavailable: {error}"
-    actions.append(
-        create_text(
-            x=130,
-            y=1000,
-            width=650,
-            text=answer,
-        ),
+        brief = (
+            "ARTIFACT TYPE: interactive demo\n"
+            "USER GOAL: Build the artifact described by the canvas.\n"
+            f"BUILD BRIEF: Use the user prompt and visible canvas objects. Gemini interpretation was unavailable: {error}\n"
+            "SUCCESS CRITERIA: A browser-viewable artifact exists and responds to the requested interaction."
+        )
+
+    project_id = request.get("projectId") if isinstance(request, dict) else None
+    build = ProjectBuilder().build(
+        project_id=project_id,
+        brief=brief,
+        user_prompt=prompt,
+        screenshot_data_url=(visual_context or {}).get("dataUrl"),
     )
-    return action_batch(actions)
+
+    if build.url:
+        actions.append(
+            create_webpage(
+                url=build.url,
+                x=130,
+                y=1000,
+                width=760,
+                height=520,
+                title=f"Project {build.project_id}",
+                metadata={"projectId": build.project_id, "source": "pythios-coding-agent"},
+            )
+        )
+        actions.append(
+            create_text(
+                x=130,
+                y=950,
+                width=760,
+                text=f"Project {build.project_id}: {build.url}",
+                metadata={"projectId": build.project_id, "source": "pythios-coding-agent"},
+            )
+        )
+
+    return {
+        "actionBatch": action_batch(actions),
+        "project": build.as_response(),
+    }

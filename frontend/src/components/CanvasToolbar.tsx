@@ -68,11 +68,17 @@ function CanvasToolbarComponent({ editor }: CanvasToolbarProps) {
   const selectedOnly = useAppStore((state) => state.selectedOnly)
   const isGenerating = useAppStore((state) => state.isGenerating)
   const addEmbeddedObject = useAppStore((state) => state.addEmbeddedObject)
+  const updateEmbeddedObject = useAppStore((state) => state.updateEmbeddedObject)
+  const setSelectedEmbeddedObjectId = useAppStore((state) => state.setSelectedEmbeddedObjectId)
   const setGeneratedUI = useAppStore((state) => state.setGeneratedUI)
   const setIsGenerating = useAppStore((state) => state.setIsGenerating)
   const setLastShapeCount = useAppStore((state) => state.setLastShapeCount)
   const setPrompt = useAppStore((state) => state.setPrompt)
   const setStatus = useAppStore((state) => state.setStatus)
+  const projectId = useAppStore((state) => state.projectId)
+  const setProjectId = useAppStore((state) => state.setProjectId)
+  const setProjectUrl = useAppStore((state) => state.setProjectUrl)
+  const setAgentActivity = useAppStore((state) => state.setAgentActivity)
 
   const getDropPoint = useCallback(() => {
     const center = editor.getViewportCenterScene()
@@ -147,10 +153,22 @@ function CanvasToolbarComponent({ editor }: CanvasToolbarProps) {
     setLastShapeCount(shapes.length)
     setIsGenerating(true)
     setStatus(trimmedPrompt ? `Drawing: ${trimmedPrompt}` : 'Drawing from default prompt')
+    setAgentActivity([
+      'Capturing the current whiteboard.',
+      'Gemini is creating the project brief.',
+      'The coding agent will build in the active project workspace.',
+    ])
 
     try {
       const visualContext = await captureCanvasVisualContext(editor)
-      const response = await generateInterface({ shapes, canvasState, visualContext, prompt: trimmedPrompt, selectedOnly })
+      const response = await generateInterface({
+        shapes,
+        canvasState,
+        visualContext,
+        prompt: trimmedPrompt,
+        selectedOnly,
+        projectId: projectId || undefined,
+      })
       const actions = response.actionBatch.actions
       const result = applyCanvasActions(editor, actions)
       const appliedCount = result.results.filter((actionResult) => actionResult.ok).length
@@ -159,11 +177,53 @@ function CanvasToolbarComponent({ editor }: CanvasToolbarProps) {
         setGeneratedUI(response.generatedUI)
       }
 
+      if (response.project) {
+        setProjectId(response.project.projectId)
+        setProjectUrl(response.project.url ?? '')
+        setAgentActivity(response.project.activity)
+
+        // A successful coding pass publishes a standalone site. Surface that
+        // site on the canvas immediately, and refresh the same frame on later
+        // passes for this project instead of adding duplicate windows.
+        if (response.project.url && !response.project.error) {
+          const existingProjectEmbed = useAppStore
+            .getState()
+            .embeddedObjects
+            .find((object) => object.kind === 'webpage' && object.metadata?.pythiosProjectId === response.project?.projectId)
+
+          if (existingProjectEmbed) {
+            updateEmbeddedObject(existingProjectEmbed.id, {
+              title: `Published project · ${response.project.projectId}`,
+              url: response.project.url,
+            })
+            setSelectedEmbeddedObjectId(existingProjectEmbed.id)
+          } else {
+            const point = getDropPoint()
+            addEmbeddedObject({
+              id: createEmbeddedObjectId(),
+              kind: 'webpage',
+              x: point.x,
+              y: point.y,
+              w: 760,
+              h: 520,
+              title: `Published project · ${response.project.projectId}`,
+              url: response.project.url,
+              createdAt: new Date().toISOString(),
+              metadata: { pythiosProjectId: response.project.projectId },
+            })
+          }
+        }
+      }
+
       const usedLocalFallback = response.generatedUI?.source === 'local'
       setStatus(
         usedLocalFallback
           ? 'Local fallback ran; connect the AI backend for canvas actions'
-          : `AI Core ran: ${appliedCount}/${actions.length} action${actions.length === 1 ? '' : 's'} applied`,
+          : response.project?.error
+            ? `Project ${response.project.projectId}: ${response.project.error}`
+            : response.project?.url
+              ? `Project ${response.project.projectId} published`
+              : `AI Core ran: ${appliedCount}/${actions.length} action${actions.length === 1 ? '' : 's'} applied`,
       )
       toast.success(usedLocalFallback ? 'Local fallback generated the preview' : actions.length ? 'AI Core actions applied' : 'AI Core ran')
     } catch (error) {
@@ -174,7 +234,7 @@ function CanvasToolbarComponent({ editor }: CanvasToolbarProps) {
     } finally {
       setIsGenerating(false)
     }
-  }, [editor, prompt, selectedOnly, setGeneratedUI, setIsGenerating, setLastShapeCount, setStatus])
+  }, [addEmbeddedObject, editor, getDropPoint, projectId, prompt, selectedOnly, setAgentActivity, setGeneratedUI, setIsGenerating, setLastShapeCount, setProjectId, setProjectUrl, setSelectedEmbeddedObjectId, setStatus, updateEmbeddedObject])
 
   return (
     <div className="canvas-toolbar" aria-label="Spatial tools">

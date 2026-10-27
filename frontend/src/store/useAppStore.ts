@@ -12,6 +12,9 @@ interface AppState {
   lastShapeCount: number
   isGenerating: boolean
   status: string
+  projectId: string
+  projectUrl: string
+  agentActivity: string[]
   setGeneratedUI: (ui: GeneratedUI | null) => void
   addEmbeddedObject: (object: EmbeddedCanvasObject) => void
   updateEmbeddedObject: (id: string, patch: Partial<EmbeddedCanvasObject>) => void
@@ -24,6 +27,9 @@ interface AppState {
   setLastShapeCount: (count: number) => void
   setIsGenerating: (isGenerating: boolean) => void
   setStatus: (status: string) => void
+  setProjectId: (projectId: string) => void
+  setProjectUrl: (projectUrl: string) => void
+  setAgentActivity: (activity: string[]) => void
 }
 
 function createEmbeddedObjectId() {
@@ -42,6 +48,9 @@ export const useAppStore = create<AppState>()(
       lastShapeCount: 0,
       isGenerating: false,
       status: 'Ready',
+      projectId: '',
+      projectUrl: '',
+      agentActivity: [],
       setGeneratedUI: (generatedUI) => set({ generatedUI }),
       addEmbeddedObject: (object) =>
         set((state) => ({
@@ -83,12 +92,17 @@ export const useAppStore = create<AppState>()(
       setLastShapeCount: (lastShapeCount) => set({ lastShapeCount }),
       setIsGenerating: (isGenerating) => set({ isGenerating }),
       setStatus: (status) => set({ status }),
+      setProjectId: (projectId) => set({ projectId }),
+      setProjectUrl: (projectUrl) => set({ projectUrl }),
+      setAgentActivity: (agentActivity) => set({ agentActivity }),
     }),
     {
       name: 'pythios-app-state',
       partialize: (state) => ({
         embeddedObjects: state.embeddedObjects,
         isSidebarCollapsed: state.isSidebarCollapsed,
+        projectId: state.projectId,
+        projectUrl: state.projectUrl,
       }),
     },
   ),

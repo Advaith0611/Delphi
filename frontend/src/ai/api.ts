@@ -3,7 +3,7 @@ import type { GenerationRequest, GenerationResponse } from '../types'
 import { generateLocalInterface } from './localGenerator'
 
 const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : 'https://pythois.onrender.com')
-const GENERATE_TIMEOUT_MS = 30000
+const GENERATE_TIMEOUT_MS = 300000
 
 function generationErrorMessage(error: unknown) {
   if (!axios.isAxiosError(error)) return error instanceof Error ? error.message : String(error)

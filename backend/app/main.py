@@ -6,9 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
+from app.services.project_builder import PUBLISHED_ROOT
 
 app = FastAPI(title="Pythios Spatial AI API", version="0.1.0")
-DEPLOYMENTS_DIR = Path(__file__).resolve().parent / "deployments"
+DEPLOYMENTS_DIR = PUBLISHED_ROOT
 
 default_origins = [
     "http://localhost:5173",

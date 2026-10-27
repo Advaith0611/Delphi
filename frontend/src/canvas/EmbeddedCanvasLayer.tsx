@@ -45,6 +45,16 @@ function getHostName(url?: string) {
   }
 }
 
+function getUrlLabel(url?: string) {
+  if (!url) return ''
+  try {
+    const parsed = new URL(url)
+    return `${parsed.host}${parsed.pathname}${parsed.search}`
+  } catch {
+    return url
+  }
+}
+
 function FileSummary({ object }: { object: EmbeddedCanvasObject }) {
   return (
     <div className="embedded-file-summary">
@@ -108,6 +118,7 @@ function WebpageFrame({ object }: { object: EmbeddedCanvasObject }) {
   const [reloadKey, setReloadKey] = useState(0)
   const timeoutRef = useRef<number | null>(null)
   const host = getHostName(object.url)
+  const urlLabel = getUrlLabel(object.url)
   const faviconUrl = useMemo(() => {
     if (!object.url) return undefined
     try {
@@ -134,7 +145,7 @@ function WebpageFrame({ object }: { object: EmbeddedCanvasObject }) {
     <div className="embedded-webpage">
       <div className="embedded-webpage-tools">
         {faviconUrl ? <img src={faviconUrl} alt="" aria-hidden="true" /> : null}
-        <span>{host}</span>
+        <span title={object.url}>{urlLabel}</span>
         <button
           type="button"
           title="Refresh webpage"

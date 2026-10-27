@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import anyio
 import importlib.util
 import inspect
 import sys
@@ -8,7 +9,7 @@ from types import ModuleType
 from uuid import uuid4
 
 from app.models.canvas_protocol import CanvasActionBatch
-from app.models.schemas import GenerateRequest, GenerateResponse, GeneratedUI
+from app.models.schemas import GenerateRequest, GenerateResponse, GeneratedUI, ProjectBuildInfo
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -16,13 +17,19 @@ AI_CORE_DIR = REPO_ROOT / "ai-core"
 AI_CORE_MAIN = AI_CORE_DIR / "main.py"
 
 
-def run_ai_core(request: GenerateRequest) -> GenerateResponse:
+async def run_ai_core(request: GenerateRequest) -> GenerateResponse:
+    """Run the synchronous user-owned AI Core outside FastAPI's event loop."""
+    return await anyio.to_thread.run_sync(_run_ai_core_sync, request)
+
+
+def _run_ai_core_sync(request: GenerateRequest) -> GenerateResponse:
     module = _load_ai_core_main()
     payload = request.model_dump(mode="json")
     raw_result = _call_run(module, payload)
     action_batch, generated_ui = _normalize_ai_core_result(raw_result)
+    project = _project_info(raw_result)
 
-    return GenerateResponse(actionBatch=action_batch, generatedUI=generated_ui)
+    return GenerateResponse(actionBatch=action_batch, generatedUI=generated_ui, project=project)
 
 
 def _load_ai_core_main() -> ModuleType:
@@ -121,3 +128,9 @@ def _normalize_ai_core_result(raw_result) -> tuple[CanvasActionBatch, GeneratedU
         return CanvasActionBatch.model_validate(raw_result), None
 
     return CanvasActionBatch(), None
+
+
+def _project_info(raw_result) -> ProjectBuildInfo | None:
+    if not isinstance(raw_result, dict) or not raw_result.get("project"):
+        return None
+    return ProjectBuildInfo.model_validate(raw_result["project"])
