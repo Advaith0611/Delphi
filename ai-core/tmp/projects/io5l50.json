@@ -1,0 +1,6 @@
+{
+  "projectId": "io5l50",
+  "agentSessionId": "cfdefb23-2762-4c7c-bac1-a54b59c40567",
+  "lastBrief": "ARTIFACT TYPE: interactive demo\n\nUSER GOAL: Create a tool that allows users to draw a curve on a coordinate plane and automatically identifies the corresponding mathematical equation.\n\nBUILD BRIEF:\n1. Implement an HTML5 Canvas-based coordinate system (X and Y axes) where users can draw freehand curves.\n2. Implement a curve-fitting algorithm (e.g., polynomial regression or least-squares fitting) to analyze the coordinates of the drawn path.\n3. Display the resulting mathematical equation (e.g., y = ax^2 + bx + c) dynamically as the user draws or upon completion of the stroke.\n4. Provide a \"Clear\" button to reset the canvas.\n\nSUCCESS CRITERIA:\n- The application successfully captures mouse/touch input to draw a continuous line on the grid.\n- The system calculates and renders a text representation of the equation that approximates the drawn shape.\n- The equation updates in real-time or immediately after the user finishes drawing.",
+  "published": true
+}

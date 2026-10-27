@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Curve Equation Finder</title>
+<style>
+  :root {
+    --bg: #fdfbf7;
+    --panel: #fff;
+    --axes: #1a1a1a;
+    --grid: #e7e2d8;
+    --stroke: #e53935;     
+    --fit: #2e7d32;         
+    --muted: #8a8578;
+    --ink: #1a1a1a;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
+  }
+
+  .shell {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--grid);
+    background: #fffbf3;
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
+  header p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
+
+  .wrap {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ---------- Canvas pane ---------- */
+  .canvas-pane {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  .surface {
+    position: relative;
+    display: inline-block;
+    background: #fff;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.10);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  canvas {
+    display: block;
+    cursor: crosshair;
+    touch-action: none;
+  }
+
+  .crosshair {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 6px; height: 6px;
+    background: var(--stroke);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  /* ---------- Sidebar ---------- */
+  aside {
+    width: 300px;
+    max-width: 42vw;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-left: 1px solid var(--grid);
+    display: flex;
+    flex-direction: column;
+    padding: 22px;
+    overflow-y: auto;
+  }
+
+  .eq-title {
+    font-size: 14px; font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin: 0 0 12px;
+  }
+
+  .eq-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 110px;
+    background: #fff;
+    border: 1px solid var(--grid);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  .eq-placeholder { color: #c7c2b5; font-style: italic; font-size: 15px; }
+  .eq-value {
+    font-size: 26px;
+    font-weight: 700;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+    line-height: 1.45;
+    word-break: break-all;
+    text-align: center;
+  }
+
+  .eq-quality {
+    margin: 0 0 4px;
+    font-size: 12.5px;
+    color: var(--muted);
+    min-height: 18px;
+  }
+  .eq-quality b { color: var(--ink); }
+
+  .eq-status {
+    font-size: 11.5px;
+    height: 15px;
+    margin-bottom: 14px;
+    color: var(--muted);
+  }
+  .eq-status.ok { color: var(--fit); font-weight: 700; }
+
+  .actions { display: flex; gap: 8px; margin-bottom: 16px; }
+  button {
+    flex: 1;
+    height: 38px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.1s, transform 0.05s, opacity 0.1s;
+  }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.55; cursor: not-allowed; }
+  .btn-calc { background: var(--fit); color: #fff; }
+  .btn-calc:not(:disabled):hover { background: #2c6b2f; }
+  .btn-clear { background: #fff; border: 1px solid var(--grid); color: var(--ink); }
+  .btn-clear:hover { background: #f5f2ea; }
+  .btn-realtime { background: #f5f2ea; color: var(--ink); border: 1px solid var(--grid); }
+  .btn-realtime.active { background: #e3f0e5; border-color: var(--fit); color: var(--fit); }
+
+  .degree-chip {
+    display: inline-block;
+    margin-bottom: 14px;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    background: #eef0f2;
+    color: #5a5548;
+    border: 1px solid #d8d4c9;
+  }
+
+  .hint {
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .legend {
+    margin-top: auto;
+    display: flex;
+    gap: 10px;
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+  .legend span { display: flex; align-items: center; gap: 6px; }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot.stroke { background: var(--stroke); }
+  .dot.fit { background: var(--fit); }
+
+  @media (max-width: 720px) {
+    .wrap { flex-direction: column; }
+    aside {
+      width: 100%;
+      max-width: 100vw;
+      border-left: none;
+      border-top: 1px solid var(--grid);
+      padding: 16px;
+    }
+    .eq-value { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <header>
+    <h1>Curve Equation Finder</h1>
+    <p>Draw a curve on the plane — the least-squares fitter identifies its equation.</p>
+  </header>
+
+  <div class="wrap">
+    <div class="canvas-pane">
+      <div class="surface">
+        <canvas id="plane" width="900" height="600"></canvas>
+        <div class="crosshair" id="crosshair"></div>
+      </div>
+    </div>
+
+    <aside>
+      <h2 class="eq-title">Identified equation</h2>
+      <div class="eq-display">
+        <span class="eq-value eq-placeholder" id="eqValue">?????????</span>
+      </div>
+      <p class="eq-quality" id="eqQuality"></p>
+      <p class="eq-status" id="eqStatus"></p>
+      <span class="degree-chip" id="degreeChip">—</span>
+      <div class="actions">
+        <button class="btn-calc" id="btnCalc">Calculate</button>
+        <button class="btn-clear" id="btnClear">Clear</button>
+        <button class="btn-realtime" id="btnRealtime">Real-time: off</button>
+      </div>
+      <p class="hint">
+        Draw with your mouse or finger. Click <b>Calculate</b> (or enable real-time)
+        to fit a polynomial to your points. The green curve shows the identified fit;
+        the graph clears for a new drawing afterward.
+      </p>
+      <div class="legend">
+        <span><span class="dot stroke"></span> Your curve</span>
+        <span><span class="dot fit"></span> Best fit</span>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(function () {
+  const canvas = document.getElementById('plane');
+  const ctx = canvas.getContext('2d');
+  const crosshair = document.getElementById('crosshair');
+  const eqValue = document.getElementById('eqValue');
+  const eqQuality = document.getElementById('eqQuality');
+  const eqStatus = document.getElementById('eqStatus');
+  const degreeChip = document.getElementById('degreeChip');
+  const btnCalc = document.getElementById('btnCalc');
+  const btnClear = document.getElementById('btnClear');
+  const btnRealtime = document.getElementById('btnRealtime');
+
+  // ---------- View state (fixed, isotropic Cartesian plane) ----------
+  const state = {
+    cx: 0, cy: 0,        // world coords at canvas center
+    scale: 1,            // pixels per world unit
+    width: 0, height: 0, dpr: 1
+  };
+  const NOM_X_SPAN = 20;   // nominal x units to fit across width
+  const NOM_Y_SPAN = 16;   // nominal y units to fit across height
+
+  let rafId = null, needsDraw = true;
+  let realtime = false;
+  let fitTimer = null;
+
+  // ---------- Drawing state ----------
+  let points = [];          // {x, y} in world coords (current stroke)
+  let strokes = [];         // array of completed strokes (each an array of points)
+  let fit = null;           // {coeffs[], r2, degree}
+
+  // ---------- Resize ----------
+  function resize() {
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const width = Math.floor(rect.width);
+    const height = Math.floor(rect.height);
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    state.dpr = dpr;
+    state.width = width;
+    state.height = height;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // isotropic scale so 1 x-unit == 1 y-unit in pixels
+    const sx_ = width / NOM_X_SPAN;
+    const sy_ = height / NOM_Y_SPAN;
+    state.scale = Math.min(sx_, sy_);
+    needsDraw = true;
+    scheduleDraw();
+  }
+
+  // ---------- Coordinate transform ----------
+  function wx(px) { return state.cx + (px - state.width / 2) / state.scale; }
+  function wy(py) { return state.cy - (py - state.height / 2) / state.scale; }
+  function sx(wx_) { return state.width / 2 + (wx_ - state.cx) * state.scale; }
+  function sy(wy_) { return state.height / 2 + (state.cy - wy_) * state.scale; }
+
+  function inPlot(px, py) {
+    return px >= 0 && px <= state.width && py >= 0 && py <= state.height;
+  }
+
+  // ---------- Primitives ----------
+  function drawArrow(x1, y1, x2, y2, headLen = 10) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - headLen * ux + headLen * 0.45 * uy, y2 - headLen * uy - headLen * 0.45 * ux);
+    ctx.lineTo(x2 - headLen * ux - headLen * 0.45 * uy, y2 - headLen * uy + headLen * 0.45 * ux);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function niceStep(range) {
+    const steps = [1, 2, 5, 10];
+    let mag = Math.pow(10, Math.floor(Math.log10(range)));
+    let step = mag;
+    for (const s of steps) {
+      const cand = s * mag;
+      if (range / cand <= 6) { step = cand; break; }
+      step = cand;
+    }
+    return step;
+  }
+
+  function drawGrid() {
+    ctx.strokeStyle = varCss('--grid');
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+
+    const xMin = wx(0), xMax = wx(state.width);
+    const yMin = wy(state.height), yMax = wy(0);
+    const xStep = niceStep((xMax - xMin) / 6);
+    const yStep = niceStep((yMax - yMin) / 6);
+
+    const xStart = Math.ceil(xMin / xStep) * xStep;
+    for (let x = xStart; x <= xMax; x += xStep) {
+      const px = Math.round(sx(x)) + 0.5;
+      ctx.moveTo(px, 0); ctx.lineTo(px, state.height);
+    }
+    const yStart = Math.ceil(yMin / yStep) * yStep;
+    for (let y = yStart; y <= yMax; y += yStep) {
+      const py = Math.round(sy(y)) + 0.5;
+      ctx.moveTo(0, py); ctx.lineTo(state.width, py);
+    }
+    ctx.stroke();
+
+    // Tick labels
+    ctx.fillStyle = '#a6a092';
+    ctx.font = '11px system-ui';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (let x = xStart; x <= xMax; x += xStep) {
+      if (Math.abs(x) < 1e-9) continue;
+      const px = sx(x);
+      if (px >= 0 && px <= state.width)
+        ctx.fillText(x.toString().replace(/\.0$/, ''), px, sy(0) + 6);
+    }
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (let y = yStart; y <= yMax; y += yStep) {
+      if (Math.abs(y) < 1e-9) continue;
+      const py = sy(y);
+      if (py >= 0 && py <= state.height)
+        ctx.fillText(y.toString().replace(/\.0$/, ''), sx(0) - 8, py);
+    }
+  }
+
+  function drawAxes() {
+    const ox = sx(0), oy = sy(0);
+    ctx.strokeStyle = varCss('--axes');
+    ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(state.width, oy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ox, 0); ctx.lineTo(ox, state.height); ctx.stroke();
+    ctx.fillStyle = varCss('--axes');
+    drawArrow(0, oy, state.width, oy);
+    drawArrow(ox, 0, ox, state.height);
+    ctx.font = '700 12px system-ui';
+    ctx.textAlign = 'right'; ctx.fillText('x', sx(14) - 10, oy - 14);
+    ctx.textAlign = 'center'; ctx.fillText('y', ox + 10, sy(14) + 14);
+  }
+
+  function varCss(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#e7e2d8';
+  }
+
+  // ---------- Stroke drawing ----------
+  function drawStroke(pts, color, width) {
+    if (pts.length < 2) return;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    const p0 = toPx(pts[0].x, pts[0].y);
+    ctx.moveTo(p0.x, p0.y);
+    for (let i = 1; i < pts.length; i++) {
+      const p = toPx(pts[i].x, pts[i].y);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+  }
+
+  function toPx(x, y) { return { x: sx(x), y: sy(y) }; }
+
+  // ---------- Curve fitting (least-squares polynomial regression) ----------
+  function evalPoly(coeffs, x) {
+    let y = 0, xp = 1;
+    for (const c of coeffs) { y += c * xp; xp *= x; }
+    return y;
+  }
+
+  function solveLinear(A, b) {
+    const n = b.length;
+    const M = A.map((row, i) => [...row, b[i]]);
+    for (let col = 0; col < n; col++) {
+      let piv = col, maxv = Math.abs(M[col][col]);
+      for (let r = col + 1; r < n; r++) {
+        if (Math.abs(M[r][col]) > maxv) { maxv = Math.abs(M[r][col]); piv = r; }
+      }
+      if (maxv < 1e-12) return null; // singular
+      if (piv !== col) [M[col], M[piv]] = [M[piv], M[col]];
+      for (let r = col + 1; r < n; r++) {
+        const f = M[r][col] / M[col][col];
+        for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+      }
+    }
+    const x = new Array(n);
+    for (let i = n - 1; i >= 0; i--) {
+      let s = M[i][n];
+      for (let j = i + 1; j < n; j++) s -= M[i][j] * x[j];
+      x[i] = s / M[i][i];
+    }
+    return x;
+  }
+
+  function polyFit(xs, ys, degree) {
+    const n = xs.length, m = degree + 1;
+    const AtA = Array.from({ length: m }, () => new Array(m).fill(0));
+    const AtY = new Array(m).fill(0);
+    for (let i = 0; i < n; i++) {
+      let xp = 1;
+      const powers = [];
+      for (let j = 0; j < m; j++) { powers.push(xp); xp *= xs[i]; }
+      for (let j = 0; j < m; j++) {
+        AtY[j] += powers[j] * ys[i];
+        for (let k = 0; k < m; k++) AtA[j][k] += powers[j] * powers[k];
+      }
+    }
+    return solveLinear(AtA, AtY);
+  }
+
+  function rSquared(xs, ys, coeffs) {
+    const mean = ys.reduce((a, b) => a + b, 0) / ys.length;
+    let ssRes = 0, ssTot = 0;
+    for (let i = 0; i < xs.length; i++) {
+      const r = ys[i] - evalPoly(coeffs, xs[i]);
+      ssRes += r * r;
+      ssTot += (ys[i] - mean) * (ys[i] - mean);
+    }
+    return ssTot === 0 ? 1 : 1 - ssRes / ssTot;
+  }
+
+  /**
+   * Fit polynomials of degrees 1..6 to (xs, ys). Return the best fit,
+   * preferring the simplest degree whose R² is within 0.012 of the best
+   * (parsimony: linear stays linear, quadratic stays quadratic).
+   */
+  function fitCurve(xs, ys) {
+    if (xs.length < 2) return null;
+    const xSpread = xs[xs.length - 1] - xs[0];
+    if (xSpread < 0.25) {
+      return { kind: 'vertical', message: 'Stroke is nearly vertical — not a function y = f(x).' };
+    }
+
+    let best = null;
+    const results = [];
+    const maxDegree = Math.min(6, xs.length - 1);
+    for (let d = 1; d <= maxDegree; d++) {
+      const coeffs = polyFit(xs, ys, d);
+      if (!coeffs) continue;
+      const r2 = rSquared(xs, ys, coeffs);
+      results.push({ degree: d, coeffs, r2 });
+      if (!best || r2 > best.r2) best = { degree: d, coeffs, r2 };
+    }
+    if (!best) return null;
+
+    // Parsimony: simplest degree within 0.012 of the best R²
+    let chosen = best;
+    for (const r of results) {
+      if (r.degree < chosen.degree && best.r2 - r.r2 <= 0.012) {
+        chosen = r;
+      }
+    }
+    chosen.xs = xs; chosen.ys = ys;
+    return chosen;
+  }
+
+  function gatherPoints() {
+    // Flatten all strokes + current stroke into single-valued samples:
+    // sort by x, then average y within small x bins so we get y = f(x).
+    const all = [];
+    for (const s of strokes) all.push(...s);
+    all.push(...points);
+    if (all.length < 3) return null;
+    all.sort((a, b) => a.x - b.x);
+    const eps = 0.10;
+    const xs = [], ys = [];
+    let i = 0;
+    while (i < all.length) {
+      let sx_ = all[i].x, sy_ = all[i].y, cnt = 1;
+      let k = i + 1;
+      while (k < all.length && all[k].x - sx_ <= eps) {
+        sx_ += all[k].x; sy_ += all[k].y; cnt++; k++;
+      }
+      xs.push(sx_ / cnt);
+      ys.push(sy_ / cnt);
+      i = k;
+    }
+    if (xs.length < 2) return null;
+    return { xs, ys };
+  }
+
+  function computeFit() {
+    const data = gatherPoints();
+    if (!data) { fit = null; return; }
+    fit = fitCurve(data.xs, data.ys);
+  }
+
+  // ---------- Equation formatting ----------
+  const SUPER = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶'];
+  function sup(n) { return SUPER[n] || ('⁺' + n); }
+
+  function fmtNum(v) {
+    if (Math.abs(v) < 1e-7) return '0';
+    let s;
+    if (Math.abs(v) >= 1000 || (Math.abs(v) < 0.001 && v !== 0)) {
+      s = v.toExponential(3);
+    } else {
+      s = v.toFixed(4).replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.$/, '');
+    }
+    if (s === '-0') s = '0';
+    return s;
+  }
+
+  function formatEquation(coeffs) {
+    const terms = [];
+    for (let i = coeffs.length - 1; i >= 0; i--) {
+      const c = coeffs[i];
+      if (Math.abs(c) < 1e-6) continue;
+      const abs = Math.abs(c);
+      let part;
+      if (i === 0) part = fmtNum(abs);
+      else {
+        const coefPart = (abs === 1) ? '' : fmtNum(abs);
+        const xPart = i === 1 ? 'x' : 'x' + sup(i);
+        part = coefPart + xPart;
+      }
+      terms.push({ coef: c, part });
+    }
+    if (terms.length === 0) return 'y = 0';
+    let out = '';
+    for (const t of terms) {
+      if (t.coef < 0) {
+        out += out ? ' − ' + t.part : '− ' + t.part;
+      } else {
+        out += out ? ' + ' + t.part : t.part;
+      }
+    }
+    return 'y = ' + out;
+  }
+
+  // ---------- Rendering ----------
+  function drawFitCurve() {
+    if (!fit || fit.kind || !fit.coeffs) return;
+    const xMin = wx(0), xMax = wx(state.width);
+    const yMin = wy(state.height), yMax = wy(0);
+    // sample x across visible range; clamp extreme y
+    const xLo = Math.max(xMin, -12), xHi = Math.min(xMax, 12);
+    ctx.strokeStyle = varCss('--fit');
+    ctx.lineWidth = 2.6;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    let started = false;
+    const steps = 500;
+    for (let i = 0; i <= steps; i++) {
+      const x = xLo + (xHi - xLo) * i / steps;
+      let y = evalPoly(fit.coeffs, x);
+      if (!isFinite(y)) { started = false; continue; }
+      if (y < yMin * 1.6 || y > yMax * 1.4) { started = false; continue; }
+      const p = toPx(x, y);
+      if (!started) { ctx.moveTo(p.x, p.y); started = true; }
+      else ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, state.width, state.height);
+    drawGrid();
+    drawAxes();
+    drawFitCurve();
+    // completed strokes (red)
+    for (const s of strokes) drawStroke(s, varCss('--stroke'), 2.6);
+    // current stroke (red)
+    drawStroke(points, varCss('--stroke'), 2.6);
+    needsDraw = false;
+  }
+
+  function scheduleDraw() {
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      if (needsDraw) draw();
+    });
+  }
+
+  // ---------- UI ----------
+  function setCrosshair(show) {
+    crosshair.style.opacity = show ? '1' : '0';
+  }
+
+  function updateUI() {
+    if (!fit) {
+      eqValue.className = 'eq-value eq-placeholder';
+      eqValue.textContent = '?????????';
+      eqQuality.textContent = '';
+      eqStatus.textContent = '';
+      eqStatus.className = 'eq-status';
+      degreeChip.textContent = '—';
+      return;
+    }
+    if (fit.kind === 'vertical') {
+      eqValue.className = 'eq-value eq-placeholder';
+      eqValue.textContent = '?????????';
+      eqQuality.textContent = '';
+      eqStatus.textContent = fit.message;
+      eqStatus.className = 'eq-status';
+      degreeChip.textContent = '—';
+      return;
+    }
+    eqValue.className = 'eq-value';
+    eqValue.textContent = formatEquation(fit.coeffs);
+    eqQuality.textContent = 'Fit quality (R²): ' + fit.r2.toFixed(3) +
+      '  ·  points: ' + fit.xs.length;
+    eqStatus.textContent = 'Curve identified';
+    eqStatus.className = 'eq-status ok';
+    degreeChip.textContent = 'Best degree: ' + fit.degree;
+  }
+
+  function startPoint(px, py) {
+    if (!inPlot(px, py)) return;
+    points = [{ x: mathX(px), y: mathY(py) }];
+    setCrosshair(true);
+    scheduleDraw();
+  }
+
+  function addPoint(px, py) {
+    if (!inPlot(px, py)) return;
+    const last = points[points.length - 1];
+    const dx = mathX(px) - last.x;
+    const dy = mathY(py) - last.y;
+    if (dx * dx + dy * dy < 0.00025) return; // throttle (~0.016 units)
+    points.push({ x: mathX(px), y: mathY(py) });
+    // draw segment immediately for responsive ink
+    const p0 = toPx(last.x, last.y);
+    const p1 = toPx(points[points.length - 1].x, points[points.length - 1].y);
+    ctx.strokeStyle = varCss('--stroke');
+    ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+    if (realtime) {
+      clearTimeout(fitTimer);
+      fitTimer = setTimeout(computeFitAndRedraw, 90);
+    }
+  }
+
+  function mathX(px) { return wx(px); }
+  function mathY(py) { return wy(py); }
+
+  function endPoint() {
+    setCrosshair(false);
+    if (points.length >= 2) strokes.push(points);
+    points = [];
+    computeFitAndRedraw();
+  }
+
+  function computeFitAndRedraw() {
+    computeFit();
+    needsDraw = true;
+    scheduleDraw();
+    updateUI();
+  }
+
+  // ---------- Interaction ----------
+  canvas.addEventListener('pointerdown', e => {
+    const rect = canvas.getBoundingClientRect();
+    startPoint(e.clientX - rect.left, e.clientY - rect.top);
+    canvas.setPointerCapture(e.pointerId);
+  }, { passive: false });
+
+  canvas.addEventListener('pointermove', e => {
+    if (e.buttons === 1) {
+      const rect = canvas.getBoundingClientRect();
+      addPoint(e.clientX - rect.left, e.clientY - rect.top);
+    }
+  }, { passive: false });
+
+  window.addEventListener('pointerup', endPoint);
+  window.addEventListener('pointercancel', endPoint);
+
+  canvas.addEventListener('touchstart', e => {
+    const t = e.changedTouches[0];
+    const rect = canvas.getBoundingClientRect();
+    startPoint(t.clientX - rect.left, t.clientY - rect.top);
+  }, { passive: false });
+  canvas.addEventListener('touchmove', e => {
+    const t = e.changedTouches[0];
+    const rect = canvas.getBoundingClientRect();
+    addPoint(t.clientX - rect.left, t.clientY - rect.top);
+    e.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener('touchend', endPoint);
+  canvas.addEventListener('touchcancel', endPoint);
+
+  window.addEventListener('resize', resize);
+
+  // ---------- Controls ----------
+  btnCalc.addEventListener('click', computeFitAndRedraw);
+
+  btnClear.addEventListener('click', () => {
+    points = [];
+    strokes = [];
+    fit = null;
+    needsDraw = true;
+    scheduleDraw();
+    updateUI();
+  });
+
+  btnRealtime.addEventListener('click', () => {
+    realtime = !realtime;
+    btnRealtime.classList.toggle('active', realtime);
+    btnRealtime.textContent = 'Real-time: ' + (realtime ? 'on' : 'off');
+  });
+
+  // ---------- Init ----------
+  resize();
+})();
+</script>
+
+</body>
+</html>
