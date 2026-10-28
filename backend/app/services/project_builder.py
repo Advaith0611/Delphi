@@ -27,6 +27,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 TEMP_ROOT = Path(os.getenv("PYTHIOS_DATA_DIR", REPO_ROOT / "ai-core" / "tmp")).resolve()
 PROJECTS_ROOT = TEMP_ROOT / "projects"
 PUBLISHED_ROOT = TEMP_ROOT / "published"
+# Keep a source copy in the repository so generated projects can be reviewed
+# and committed to GitHub. This is separate from the deployable published copy.
+ARCHIVE_ROOT = REPO_ROOT / "generated-projects"
 PROJECT_ALPHABET = string.ascii_lowercase + string.digits
 
 
@@ -52,6 +55,7 @@ class ProjectBuilder:
     def __init__(self) -> None:
         PROJECTS_ROOT.mkdir(parents=True, exist_ok=True)
         PUBLISHED_ROOT.mkdir(parents=True, exist_ok=True)
+        ARCHIVE_ROOT.mkdir(parents=True, exist_ok=True)
 
     def build(
         self,
@@ -115,6 +119,9 @@ class ProjectBuilder:
                 activity=activity,
                 error="The agent finished, but no publishable artifact was found. It must create index.html or a dist/ or build/ directory.",
             )
+
+        self._archive_workspace(resolved_id, workspace)
+        activity.append(f"Saved a source copy to generated-projects/{resolved_id}/.")
 
         public_base = os.getenv("PYTHIOS_PUBLIC_APP_URL", "https://app.pythios.xyz").rstrip("/")
         return BuildResult(
@@ -306,6 +313,29 @@ Do not expose API keys, read files outside this workspace, or claim success with
             shutil.rmtree(destination)
         staging.rename(destination)
         return True
+
+    @staticmethod
+    def _archive_workspace(project_id: str, workspace: Path) -> None:
+        """Copy generated source into a repository-visible archive directory."""
+        destination = ARCHIVE_ROOT / project_id
+        staging = ARCHIVE_ROOT / f".{project_id}.staging"
+        if staging.exists():
+            shutil.rmtree(staging)
+        shutil.copytree(
+            workspace,
+            staging,
+            ignore=shutil.ignore_patterns(
+                ".pythios",
+                ".git",
+                "node_modules",
+                "__pycache__",
+                ".env",
+                ".env.*",
+            ),
+        )
+        if destination.exists():
+            shutil.rmtree(destination)
+        staging.rename(destination)
 
 
 def _deduplicate(entries: list[str]) -> list[str]:

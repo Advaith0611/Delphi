@@ -174,7 +174,7 @@ export function GeneratedRenderer() {
       <div className="panel-header">
         <div>
           <span>{projectId ? `Active project · ${projectId}` : 'Live generated interface'}</span>
-          <h2>{generatedUI?.title ?? 'Draw a layout, then generate'}</h2>
+          <h2>{generatedUI?.title ?? 'Draw a layout, then click generate'}</h2>
         </div>
         <div className="source-pill">{generatedUI?.source ?? 'ready'}</div>
       </div>
