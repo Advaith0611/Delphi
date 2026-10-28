@@ -15,6 +15,9 @@ import os
 import secrets
 import shutil
 import string
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -122,6 +125,12 @@ class ProjectBuilder:
 
         self._archive_workspace(resolved_id, workspace)
         activity.append(f"Saved a source copy to generated-projects/{resolved_id}/.")
+        try:
+            activity.append(self._publish_archive_to_github(resolved_id))
+        except (OSError, HTTPError, URLError, RuntimeError) as error:
+            # GitHub archiving is a convenience; it must not make a generated
+            # project unavailable when credentials or the network are absent.
+            activity.append(f"GitHub archive failed: {error}")
 
         public_base = os.getenv("PYTHIOS_PUBLIC_APP_URL", "https://app.pythios.xyz").rstrip("/")
         return BuildResult(
@@ -327,6 +336,7 @@ Do not expose API keys, read files outside this workspace, or claim success with
             ignore=shutil.ignore_patterns(
                 ".pythios",
                 ".git",
+                ".claude",
                 "node_modules",
                 "__pycache__",
                 ".env",
@@ -336,6 +346,70 @@ Do not expose API keys, read files outside this workspace, or claim success with
         if destination.exists():
             shutil.rmtree(destination)
         staging.rename(destination)
+
+    @staticmethod
+    def _publish_archive_to_github(project_id: str) -> str:
+        """Upload the archived project through GitHub's Contents API."""
+        token = os.getenv("GITHUB_TOKEN", "").strip()
+        if not token:
+            return "GitHub archive skipped: GITHUB_TOKEN is not configured."
+
+        repository = os.getenv("GITHUB_REPOSITORY", "Advaith0611/Delphi").strip().strip("/")
+        branch = os.getenv("GITHUB_BRANCH", "main").strip() or "main"
+        archive_path = os.getenv("GITHUB_ARCHIVE_PATH", "generated-projects").strip("/")
+        if repository.count("/") != 1 or not archive_path:
+            raise RuntimeError("GITHUB_REPOSITORY or GITHUB_ARCHIVE_PATH is invalid")
+
+        source_root = ARCHIVE_ROOT / project_id
+        files = sorted(path for path in source_root.rglob("*") if path.is_file())
+        if not files:
+            raise RuntimeError("the generated project archive is empty")
+
+        api_root = f"https://api.github.com/repos/{repository}/contents"
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "pythios-project-archiver",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        for source_file in files:
+            relative_path = source_file.relative_to(source_root).as_posix()
+            remote_path = f"{archive_path}/{project_id}/{relative_path}"
+            item_url = f"{api_root}/{quote(remote_path, safe='/')}"
+            existing_sha = ProjectBuilder._github_file_sha(item_url, headers, branch)
+            payload: dict[str, str] = {
+                "message": f"Archive generated project {project_id}: {relative_path}",
+                "content": base64.b64encode(source_file.read_bytes()).decode("ascii"),
+                "branch": branch,
+            }
+            if existing_sha:
+                payload["sha"] = existing_sha
+            request = Request(
+                item_url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={**headers, "Content-Type": "application/json"},
+                method="PUT",
+            )
+            with urlopen(request, timeout=30) as response:
+                if response.status not in (200, 201):
+                    raise RuntimeError(f"GitHub returned HTTP {response.status}")
+        return f"Uploaded {len(files)} file(s) to GitHub under {archive_path}/{project_id}/."
+
+    @staticmethod
+    def _github_file_sha(item_url: str, headers: dict[str, str], branch: str) -> str | None:
+        request = Request(
+            f"{item_url}?ref={quote(branch, safe='')}",
+            headers=headers,
+            method="GET",
+        )
+        try:
+            with urlopen(request, timeout=20) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            return payload.get("sha")
+        except HTTPError as error:
+            if error.code == 404:
+                return None
+            raise RuntimeError(f"GitHub lookup failed with HTTP {error.code}") from error
 
 
 def _deduplicate(entries: list[str]) -> list[str]:
