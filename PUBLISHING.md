@@ -43,7 +43,9 @@ Name: app
 Value: pythois.onrender.com
 ```
 
-Set these Render environment variables:
+### Persistent-disk deployment
+
+Set these Render environment variables when using a persistent disk:
 
 ```
 PYTHIOS_PUBLIC_APP_URL=https://app.pythios.xyz
@@ -61,6 +63,29 @@ Use one backend instance with this Render disk configuration. Render disks are
 attached to a single service instance and disable zero-downtime deploys; the
 filesystem lock additionally protects concurrent writers on a shared POSIX disk
 in local or self-managed deployments.
+
+### No-disk deployment (GitHub archive)
+
+Free Render services cannot attach a persistent disk. In that configuration,
+the local filesystem is only a cache and the durable published version is kept
+in the connected GitHub repository. Set these Render environment variables:
+
+```
+PYTHIOS_PUBLIC_APP_URL=https://app.pythios.xyz
+GITHUB_TOKEN=<fine-grained token with Contents: Read and write>
+GITHUB_REPOSITORY=Advaith0611/Delphi
+GITHUB_BRANCH=main
+GITHUB_ARCHIVE_PATH=generated-projects
+PYTHIOS_REQUIRE_GITHUB_ARCHIVE=true
+```
+
+Remove `PYTHIOS_DATA_DIR=/var/data/pythios` (or leave it: the backend safely
+falls back to temporary storage when `/var/data` is unavailable). Each
+successful generation uploads an immutable version first, then atomically
+updates `generated-projects/<project-id>/.published.json`. After a Render
+restart the public route reads that manifest and serves the version through the
+same sandboxed iframe. The repository must remain available to Render; private
+repositories require the token for both writing and reading.
 
 After deploying, verify both:
 

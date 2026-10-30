@@ -22,15 +22,27 @@ from urllib.request import Request, urlopen
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from app.services.published_apps import PublishedAppStore, is_valid_project_id
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-# Local development keeps generated projects in the repository. Production can
-# point this at a mounted persistent disk (for example, Render's /var/data) so
-# published projects survive deploys and service restarts.
-TEMP_ROOT = Path(os.getenv("PYTHIOS_DATA_DIR", REPO_ROOT / "ai-core" / "tmp")).resolve()
+# Local development keeps generated projects in the repository. On a no-disk
+# Render service this is only a cache: the durable copy is the GitHub archive.
+# A bad disk mount must not prevent the service from starting.
+def _data_root() -> Path:
+    configured = Path(os.getenv("PYTHIOS_DATA_DIR", REPO_ROOT / "ai-core" / "tmp")).resolve()
+    try:
+        configured.mkdir(parents=True, exist_ok=True)
+        return configured
+    except OSError:
+        fallback = Path(tempfile.gettempdir()) / "pythios"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+
+TEMP_ROOT = _data_root()
 PROJECTS_ROOT = TEMP_ROOT / "projects"
 PUBLISHED_ROOT = TEMP_ROOT / "published"
 # Keep a source copy in the repository so generated projects can be reviewed
@@ -129,6 +141,23 @@ class ProjectBuilder:
                 error=f"Coding agent did not run: {error}",
             )
 
+        # GitHub is the durable source of truth for no-disk Render services.
+        # Archive before moving the local pointer so an archive failure cannot
+        # replace a previously durable public version.
+        self._archive_workspace(resolved_id, workspace)
+        activity.append(f"Saved a source copy to generated-projects/{resolved_id}/.")
+        try:
+            activity.append(self._publish_archive_to_github(resolved_id))
+        except (OSError, HTTPError, URLError, RuntimeError) as error:
+            if self._github_archive_required():
+                return BuildResult(
+                    project_id=resolved_id,
+                    status="failed",
+                    activity=activity,
+                    error=f"Durable GitHub publishing failed: {error}",
+                )
+            activity.append(f"GitHub archive failed: {error}")
+
         try:
             published = self.published_apps.publish_workspace(resolved_id, workspace, lock=False)
         except OSError as error:
@@ -155,15 +184,6 @@ class ProjectBuilder:
                 activity=activity,
                 error="The agent finished, but no publishable artifact was found. It must create index.html or a dist/ or build/ directory.",
             )
-
-        self._archive_workspace(resolved_id, workspace)
-        activity.append(f"Saved a source copy to generated-projects/{resolved_id}/.")
-        try:
-            activity.append(self._publish_archive_to_github(resolved_id))
-        except (OSError, HTTPError, URLError, RuntimeError) as error:
-            # GitHub archiving is a convenience; it must not make a generated
-            # project unavailable when credentials or the network are absent.
-            activity.append(f"GitHub archive failed: {error}")
 
         public_base = os.getenv("PYTHIOS_PUBLIC_APP_URL", "https://app.pythios.xyz").rstrip("/")
         return BuildResult(
@@ -368,6 +388,8 @@ Do not expose API keys, read files outside this workspace, or claim success with
         """Upload the archived project through GitHub's Contents API."""
         token = os.getenv("GITHUB_TOKEN", "").strip()
         if not token:
+            if ProjectBuilder._github_archive_required():
+                raise RuntimeError("GITHUB_TOKEN is required for durable publishing")
             return "GitHub archive skipped: GITHUB_TOKEN is not configured."
 
         repository = os.getenv("GITHUB_REPOSITORY", "Advaith0611/Delphi").strip().strip("/")
@@ -388,9 +410,13 @@ Do not expose API keys, read files outside this workspace, or claim success with
             "User-Agent": "pythios-project-archiver",
             "X-GitHub-Api-Version": "2022-11-28",
         }
+        # Upload a new immutable version first. The small manifest is written
+        # only after all files arrive, making it the atomic public switch for
+        # Render instances that restore projects from GitHub after a restart.
+        version = uuid4().hex
         for source_file in files:
             relative_path = source_file.relative_to(source_root).as_posix()
-            remote_path = f"{archive_path}/{project_id}/{relative_path}"
+            remote_path = f"{archive_path}/{project_id}/.versions/{version}/{relative_path}"
             item_url = f"{api_root}/{quote(remote_path, safe='/')}"
             existing_sha = ProjectBuilder._github_file_sha(item_url, headers, branch)
             payload: dict[str, str] = {
@@ -409,7 +435,31 @@ Do not expose API keys, read files outside this workspace, or claim success with
             with urlopen(request, timeout=30) as response:
                 if response.status not in (200, 201):
                     raise RuntimeError(f"GitHub returned HTTP {response.status}")
-        return f"Uploaded {len(files)} file(s) to GitHub under {archive_path}/{project_id}/."
+
+        manifest_path = f"{archive_path}/{project_id}/.published.json"
+        manifest_url = f"{api_root}/{quote(manifest_path, safe='/')}"
+        manifest_sha = ProjectBuilder._github_file_sha(manifest_url, headers, branch)
+        manifest: dict[str, str] = {
+            "message": f"Publish generated project {project_id}",
+            "content": base64.b64encode(json.dumps({"version": version}).encode("utf-8")).decode("ascii"),
+            "branch": branch,
+        }
+        if manifest_sha:
+            manifest["sha"] = manifest_sha
+        request = Request(
+            manifest_url,
+            data=json.dumps(manifest).encode("utf-8"),
+            headers={**headers, "Content-Type": "application/json"},
+            method="PUT",
+        )
+        with urlopen(request, timeout=30) as response:
+            if response.status not in (200, 201):
+                raise RuntimeError(f"GitHub manifest update returned HTTP {response.status}")
+        return f"Published {len(files)} durable file(s) to GitHub for project {project_id}."
+
+    @staticmethod
+    def _github_archive_required() -> bool:
+        return os.getenv("PYTHIOS_REQUIRE_GITHUB_ARCHIVE", "").strip().lower() in {"1", "true", "yes"}
 
     @staticmethod
     def _github_file_sha(item_url: str, headers: dict[str, str], branch: str) -> str | None:
