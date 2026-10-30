@@ -109,7 +109,10 @@ venv\\Scripts\\activate
 ## Install Backend Dependencies
 
 ```bash
-pip install fastapi uvicorn python-dotenv requests pydantic websockets
+python -m pip install -r requirements.txt
+
+# Verify that the same interpreter can import the AI SDK.
+venv/bin/python -c "from google import genai; print('google-genai: OK')"
 ```
 
 ---
@@ -151,7 +154,8 @@ Start Ollama locally before running the backend.
 
 ```bash
 cd backend
-python3 -m pip install -r requirements.txt
+# Use the virtual environment's interpreter for both installation and startup.
+venv/bin/python -m pip install -r requirements.txt
 venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -160,6 +164,13 @@ Backend runs on:
 ```txt
 http://localhost:8000
 ```
+
+## Publishing generated apps
+
+Successful coding-agent generations are published automatically under their
+existing project ID. Production setup for the `app.pythios.xyz` subdomain,
+secure iframe isolation, and durable Render disk storage is documented in
+[PUBLISHING.md](PUBLISHING.md).
 
 ---
 

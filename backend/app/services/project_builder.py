@@ -15,12 +15,15 @@ import os
 import secrets
 import shutil
 import string
+import tempfile
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from app.services.published_apps import PublishedAppStore, is_valid_project_id
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -59,6 +62,7 @@ class ProjectBuilder:
         PROJECTS_ROOT.mkdir(parents=True, exist_ok=True)
         PUBLISHED_ROOT.mkdir(parents=True, exist_ok=True)
         ARCHIVE_ROOT.mkdir(parents=True, exist_ok=True)
+        self.published_apps = PublishedAppStore(PUBLISHED_ROOT)
 
     def build(
         self,
@@ -73,6 +77,27 @@ class ProjectBuilder:
         except ValueError as error:
             return BuildResult(project_id=project_id or "unknown", status="failed", error=str(error))
 
+        # The workspace is mutable while the coding agent runs. Hold the same
+        # per-project filesystem lock used by publishing so two regenerate
+        # requests cannot interleave writes or publish a mixed artifact.
+        with self.published_apps.project_lock(resolved_id):
+            return self._build_locked(
+                resolved_id=resolved_id,
+                created=created,
+                brief=brief,
+                user_prompt=user_prompt,
+                screenshot_data_url=screenshot_data_url,
+            )
+
+    def _build_locked(
+        self,
+        *,
+        resolved_id: str,
+        created: bool,
+        brief: str,
+        user_prompt: str | None,
+        screenshot_data_url: str | None,
+    ) -> BuildResult:
         workspace = PROJECTS_ROOT / resolved_id
         metadata = self._load_metadata(resolved_id)
         activity = [
@@ -104,7 +129,15 @@ class ProjectBuilder:
                 error=f"Coding agent did not run: {error}",
             )
 
-        published = self._publish_workspace(resolved_id, workspace)
+        try:
+            published = self.published_apps.publish_workspace(resolved_id, workspace, lock=False)
+        except OSError as error:
+            return BuildResult(
+                project_id=resolved_id,
+                status="failed",
+                activity=activity,
+                error=f"Publishing failed while saving the generated app: {error}",
+            )
         metadata.update(
             {
                 "projectId": resolved_id,
@@ -156,7 +189,7 @@ class ProjectBuilder:
 
     @staticmethod
     def _is_valid_project_id(value: str) -> bool:
-        return len(value) == 6 and all(character in PROJECT_ALPHABET for character in value)
+        return is_valid_project_id(value)
 
     def _metadata_path(self, project_id: str) -> Path:
         return PROJECTS_ROOT / f"{project_id}.json"
@@ -171,7 +204,17 @@ class ProjectBuilder:
             return {}
 
     def _save_metadata(self, project_id: str, metadata: dict[str, Any]) -> None:
-        self._metadata_path(project_id).write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        destination = self._metadata_path(project_id)
+        fd, temporary = tempfile.mkstemp(prefix=f".{project_id}-", suffix=".json", dir=PROJECTS_ROOT)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(metadata, handle, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, destination)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
 
     @staticmethod
     def _save_screenshot(workspace: Path, data_url: str | None) -> Path | None:
@@ -295,33 +338,6 @@ Do not expose API keys, read files outside this workspace, or claim success with
                     activity.append("Agent completed its implementation pass.")
 
         return {"activity": _deduplicate(activity), "session_id": session_id}
-
-    @staticmethod
-    def _publish_workspace(project_id: str, workspace: Path) -> bool:
-        source = next(
-            (
-                candidate
-                for candidate in (workspace / "dist", workspace / "build", workspace)
-                if (candidate / "index.html").is_file()
-            ),
-            None,
-        )
-        if source is None:
-            return False
-
-        destination = PUBLISHED_ROOT / project_id
-        staging = PUBLISHED_ROOT / f".{project_id}.staging"
-        if staging.exists():
-            shutil.rmtree(staging)
-        shutil.copytree(
-            source,
-            staging,
-            ignore=shutil.ignore_patterns(".pythios", ".git", "node_modules", "__pycache__", ".env", ".env.*"),
-        )
-        if destination.exists():
-            shutil.rmtree(destination)
-        staging.rename(destination)
-        return True
 
     @staticmethod
     def _archive_workspace(project_id: str, workspace: Path) -> None:
