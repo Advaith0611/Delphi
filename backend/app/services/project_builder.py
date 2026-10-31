@@ -197,7 +197,8 @@ class ProjectBuilder:
         if requested_id:
             if not self._is_valid_project_id(requested_id):
                 raise ValueError("Project IDs must be six lowercase letters or numbers.")
-            if not (PROJECTS_ROOT / requested_id).is_dir():
+            workspace = PROJECTS_ROOT / requested_id
+            if not workspace.is_dir() and not self._restore_workspace_from_github(requested_id, workspace):
                 raise ValueError(f"Project {requested_id} does not exist. Clear the project ID to create a new project.")
             return requested_id, False
 
@@ -210,6 +211,113 @@ class ProjectBuilder:
     @staticmethod
     def _is_valid_project_id(value: str) -> bool:
         return is_valid_project_id(value)
+
+    def _restore_workspace_from_github(self, project_id: str, workspace: Path) -> bool:
+        """Restore an archived project after an ephemeral Render restart."""
+        settings = self._github_archive_settings()
+        if settings is None:
+            return False
+        api_root, headers, branch, archive_path = settings
+        version_payload = self._github_raw_file(
+            api_root,
+            headers,
+            branch,
+            f"{archive_path}/{project_id}/.published.json",
+        )
+        root = f"{archive_path}/{project_id}"
+        if version_payload:
+            try:
+                version = json.loads(version_payload.decode("utf-8")).get("version")
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                version = None
+            if isinstance(version, str) and len(version) == 32 and all(char in string.hexdigits.lower() for char in version):
+                root = f"{root}/.versions/{version}"
+
+        staging = PROJECTS_ROOT / f".{project_id}-restore-{uuid4().hex}"
+        try:
+            self._download_github_directory(api_root, headers, branch, root, staging)
+            if not any((staging / candidate / "index.html").is_file() for candidate in (Path("."), Path("dist"), Path("build"))):
+                return False
+            os.replace(staging, workspace)
+            return True
+        except (HTTPError, URLError, OSError, RuntimeError) as error:
+            # A missing project is normal; avoid exposing GitHub or filesystem
+            # details to the public API response.
+            return False
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
+
+    @staticmethod
+    def _github_archive_settings() -> tuple[str, dict[str, str], str, str] | None:
+        repository = os.getenv("GITHUB_REPOSITORY", "Advaith0611/Delphi").strip().strip("/")
+        branch = os.getenv("GITHUB_BRANCH", "main").strip() or "main"
+        archive_path = os.getenv("GITHUB_ARCHIVE_PATH", "generated-projects").strip("/")
+        if repository.count("/") != 1 or not archive_path:
+            return None
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "pythios-project-archiver",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        token = os.getenv("GITHUB_TOKEN", "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return f"https://api.github.com/repos/{repository}/contents", headers, branch, archive_path
+
+    @staticmethod
+    def _github_raw_file(api_root: str, headers: dict[str, str], branch: str, remote_path: str) -> bytes | None:
+        request = Request(
+            f"{api_root}/{quote(remote_path, safe='/')}?ref={quote(branch, safe='')}",
+            headers={**headers, "Accept": "application/vnd.github.raw+json"},
+            method="GET",
+        )
+        try:
+            with urlopen(request, timeout=20) as response:
+                return response.read()
+        except HTTPError as error:
+            if error.code == 404:
+                return None
+            raise
+
+    @classmethod
+    def _download_github_directory(
+        cls,
+        api_root: str,
+        headers: dict[str, str],
+        branch: str,
+        remote_path: str,
+        destination: Path,
+    ) -> None:
+        request = Request(
+            f"{api_root}/{quote(remote_path, safe='/')}?ref={quote(branch, safe='')}",
+            headers=headers,
+            method="GET",
+        )
+        try:
+            with urlopen(request, timeout=20) as response:
+                entries = json.loads(response.read().decode("utf-8"))
+        except HTTPError as error:
+            if error.code == 404:
+                raise RuntimeError("archived project was not found") from error
+            raise
+        if not isinstance(entries, list):
+            raise RuntimeError("archived project root is not a directory")
+        destination.mkdir(parents=True, exist_ok=True)
+        for entry in entries:
+            name = entry.get("name") if isinstance(entry, dict) else None
+            entry_type = entry.get("type") if isinstance(entry, dict) else None
+            path = entry.get("path") if isinstance(entry, dict) else None
+            if not isinstance(name, str) or not name or "/" in name or name in {".", ".."} or not isinstance(path, str):
+                raise RuntimeError("invalid archived project path")
+            target = destination / name
+            if entry_type == "dir":
+                cls._download_github_directory(api_root, headers, branch, path, target)
+            elif entry_type == "file":
+                content = cls._github_raw_file(api_root, headers, branch, path)
+                if content is None:
+                    raise RuntimeError("archived project file disappeared during restore")
+                target.write_bytes(content)
 
     def _metadata_path(self, project_id: str) -> Path:
         return PROJECTS_ROOT / f"{project_id}.json"

@@ -3,7 +3,10 @@ import type { GenerationRequest, GenerationResponse } from '../types'
 import { generateLocalInterface } from './localGenerator'
 
 const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : 'https://pythois.onrender.com')
-const GENERATE_TIMEOUT_MS = 300000
+// Coding-agent generations can take several minutes. Do not turn a timeout
+// into a browser-only result while the backend may still be publishing the
+// real project.
+const GENERATE_TIMEOUT_MS = 600000
 
 function generationErrorMessage(error: unknown) {
   if (!axios.isAxiosError(error)) return error instanceof Error ? error.message : String(error)
@@ -33,7 +36,7 @@ export async function generateInterface(request: GenerationRequest): Promise<Gen
   } catch (error) {
     // A missing backend, CORS failure, or unreachable production URL has no
     // HTTP response. Keep the client usable with the browser-only generator.
-    if (axios.isAxiosError(error) && !error.response) {
+    if (axios.isAxiosError(error) && !error.response && error.code !== 'ECONNABORTED') {
       console.warn('Generate API unavailable; using local fallback generator.', error.message)
       return localFallbackResponse(request)
     }

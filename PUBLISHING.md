@@ -87,6 +87,11 @@ restart the public route reads that manifest and serves the version through the
 same sandboxed iframe. The repository must remain available to Render; private
 repositories require the token for both writing and reading.
 
+When a user regenerates an existing project after a Render restart, the backend
+restores that published version from GitHub into its temporary workspace before
+running the coding agent. The existing six-character project ID and public URL
+are retained.
+
 After deploying, verify both:
 
 ```
