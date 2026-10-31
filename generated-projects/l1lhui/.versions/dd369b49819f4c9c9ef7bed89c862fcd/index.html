@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Daily Habits</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Inter:wght@300;400;600;700&display=swap');
+
+:root {
+  --cream: #fdf8f0;
+  --parchment: #f5ead6;
+  --ink: #2b2b2b;
+  --ink-soft: #5a5650;
+  --green: #4a7c59;
+  --green-light: #c8e6c9;
+  --red: #c0392b;
+  --red-soft: #f5c6cb;
+  --accent: #cfa57a;
+  --border: #4a4a4a;
+  --card-bg: rgba(255,255,255,0.72);
+  --shadow: rgba(74,74,74,0.12);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: linear-gradient(135deg, #f5e9cf 0%, #e8d4a8 100%);
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+body {
+  display: flex; flex-direction: column; align-items: center;
+  min-height: 100vh; padding: 40px 20px 60px;
+}
+
+.container {
+  width: 100%; max-width: 980px; display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 28px;
+}
+
+/* Header */
+header {
+  text-align: center; margin-bottom: 10px; width: 100%; max-width: 980px;
+}
+header h1 {
+  font-family: 'Caveat', cursive; font-size: clamp(3rem, 8vw, 4.2rem);
+  color: var(--ink); letter-spacing: 1px; line-height: 1.05;
+  text-shadow: 1px 2px 0 rgba(255,255,255,0.35);
+}
+header p { font-size: 1rem; color: var(--ink-soft); margin-top: 6px; }
+
+/* Cards */
+.card {
+  background: var(--card-bg);
+  border: 2.5px solid var(--border);
+  border-radius: 24px;
+  padding: 26px 26px 22px;
+  box-shadow: 0 10px 32px var(--shadow), 0 2px 6px rgba(74,74,74,0.05);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: box-shadow 0.25s ease;
+}
+.card:hover { box-shadow: 0 16px 42px rgba(74,74,74,0.14), 0 4px 10px rgba(74,74,74,0.06); }
+
+.card h2 {
+  font-family: 'Caveat', cursive; font-size: 1.65rem; margin-bottom: 18px;
+  text-align: center; letter-spacing: 0.8px;
+}
+
+/* Completed / Pending lists */
+.habit-list { list-style: none; }
+.habit-list li {
+  display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1.5px dashed rgba(74,74,74,0.14);
+  animation: fadeUp 0.35s ease forwards; opacity: 0; transform: translateY(6px);
+}
+.habit-list li:nth-child(1) { animation-delay: 0.05s; }
+.habit-list li:nth-child(2) { animation-delay: 0.1s; }
+.habit-list li:nth-child(3) { animation-delay: 0.15s; }
+.habit-list li:nth-child(4) { animation-delay: 0.2s; }
+
+@keyframes fadeUp {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Checkbox style */
+.habit-check {
+  appearance: none; width: 22px; height: 22px; border: 2px solid var(--border);
+  border-radius: 6px; cursor: pointer; flex-shrink: 0; position: relative;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+.habit-check:checked {
+  background: var(--green); border-color: var(--green); animation: pop 0.25s ease;
+}
+.habit-check:checked::after {
+  content: ''; position: absolute; left: 6px; top: 2px; width: 5px; height: 10px;
+  border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+
+@keyframes pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+/* Habit label */
+.habit-label {
+  flex: 1; font-size: 1.05rem; font-weight: 500;
+  border-bottom: 1px solid transparent; transition: all 0.3s ease;
+  padding-bottom: 1px;
+}
+.habit-label.completed {
+  text-decoration: line-through; color: var(--green); opacity: 0.75;
+  border-bottom-color: var(--green-light);
+  animation: strike 0.35s ease;
+}
+
+@keyframes strike {
+  from { opacity: 1; color: inherit; text-decoration: none; }
+  to { opacity: 0.75; text-decoration: line-through; color: var(--green); }
+}
+
+/* Delete button */
+.delete-btn {
+  background: transparent; border: 1.5px solid var(--red); color: var(--red);
+  border-radius: 50%; width: 28px; height: 28px; font-size: 16px; line-height: 1;
+  cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center;
+  opacity: 0.7;
+}
+.delete-btn:hover { background: var(--red-soft); opacity: 1; }
+
+/* Add habit form */
+.add-form {
+  display: flex; gap: 8px; margin-top: 10px;
+}
+.add-form input {
+  flex: 1; padding: 10px 12px; font-size: 0.95rem; border: 2px solid var(--border);
+  border-radius: 10px; background: #fffdf7; color: var(--ink); outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.add-form input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(74,124,89,0.1); }
+.add-form button {
+  padding: 10px 18px; font-size: 0.9rem; font-weight: 700; border: 2px solid var(--green);
+  background: var(--green); color: white; border-radius: 10px; cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.2s ease;
+  box-shadow: 0 3px 0 #2d5a36;
+}
+.add-form button:active { transform: translateY(3px); box-shadow: none; }
+
+/* Today's Goal */
+.goal-card { text-align: center; }
+.goal-card .goal-text {
+  font-family: 'Caveat', cursive; font-size: 1.35rem; color: var(--ink); margin-bottom: 16px;
+  min-height: 2.4em;
+}
+.goal-card button.achieved-btn {
+  width: 100%; padding: 14px 18px; font-size: 1rem; font-weight: 700;
+  border: 2.5px solid var(--green); border-radius: 14px; background: var(--green-light);
+  color: var(--green); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+  box-shadow: 0 3px 8px rgba(74,124,89,0.1);
+}
+.goal-card button.achieved-btn:hover { background: var(--green); color: white; box-shadow: 0 5px 14px rgba(74,124,89,0.25); }
+.goal-card button.achieved-btn .heart { font-size: 1.35rem; transition: transform 0.3s ease; }
+.goal-card button.achieved-btn:hover .heart { transform: scale(1.15) rotate(-5deg); }
+
+/* Progress */
+.progress-card { text-align: center; }
+.progress-ring-wrap {
+  position: relative; width: 160px; height: 160px; margin: 0 auto 16px;
+}
+.progress-ring-wrap svg { transform: rotate(-90deg); }
+.progress-ring-wrap circle.track { fill: none; stroke: #e8dccf; stroke-width: 10; }
+.progress-ring-wrap circle.fill {
+  fill: none; stroke: var(--red); stroke-width: 10; stroke-linecap: round;
+  stroke-dasharray: 440; stroke-dashoffset: 440; transition: stroke-dashoffset 0.8s ease, stroke 0.8s ease;
+}
+.progress-label {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 2rem; font-weight: 700; color: var(--ink);
+}
+.progress-summary {
+  font-size: 1.1rem; color: var(--ink-soft); margin-top: 6px;
+}
+.progress-summary .fraction { font-weight: 700; color: var(--ink); }
+
+/* Streak */
+.streak {
+  text-align: center; margin-top: 6px;
+}
+.streak .streak-num {
+  font-family: 'Caveat', cursive; font-size: 2.2rem; color: var(--red); line-height: 1;
+  animation: pulse 2s infinite ease-in-out;
+}
+.streak .streak-label { font-size: 0.75rem; color: var(--ink-soft); letter-spacing: 0.8px; text-transform: uppercase; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Footer note */
+footer.note {
+  margin-top: 36px; font-size: 0.82rem; color: var(--ink-soft); text-align: center; max-width: 600px; opacity: 0.85;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .container { gap: 18px; }
+  .card { padding: 20px 18px 18px; border-radius: 20px; }
+  body { padding: 24px 14px 40px; }
+  .progress-ring-wrap { width: 130px; height: 130px; }
+}
+</style>
+</head>
+<body>
+  <header>
+    <h1>Daily Habits</h1>
+    <p>Manage tasks, build streaks, and keep every day moving forward.</p>
+  </header>
+
+  <main class="container" aria-label="Dashboard">
+    <!-- Completed -->
+    <section class="card" aria-label="Completed habits">
+      <h2>Completed</h2>
+      <ul class="habit-list" id="completedList" aria-label="Completed habits list"></ul>
+    </section>
+
+    <!-- Today's Goal -->
+    <section class="card goal-card" aria-label="Today's goal">
+      <h2>Today's Goal</h2>
+      <p class="goal-text" id="goalText">Learn the French song "Je veux"</p>
+      <button class="achieved-btn" onclick="markGoalDone()" aria-label="Mark today's goal as achieved">
+        <span>Achieved</span>
+        <span class="heart" aria-hidden="true">&#10084;</span>
+      </button>
+    </section>
+
+    <!-- Pending -->
+    <section class="card" aria-label="Pending habits">
+      <h2>Pending</h2>
+      <ul class="habit-list" id="pendingList" aria-label="Pending habits list"></ul>
+      <form class="add-form" onsubmit="addHabit(event)" aria-label="Add new habit">
+        <input type="text" id="newHabitInput" placeholder="New habit..." aria-label="New habit name" required />
+        <button type="submit" aria-label="Add habit">Add</button>
+      </form>
+    </section>
+
+    <!-- Progress -->
+    <section class="card progress-card" aria-label="Progress summary">
+      <h2>Progress</h2>
+      <div class="progress-ring-wrap" aria-label="Progress ring">
+        <svg viewBox="0 0 160 160" width="100%" height="100%">
+          <circle class="track" cx="80" cy="80" r="70" />
+          <circle class="fill" id="progressRing" cx="80" cy="80" r="70" />
+        </svg>
+        <div class="progress-label" id="progressLabel">0 / 0</div>
+      </div>
+      <p class="progress-summary">Completed <span class="fraction" id="fraction">0 / 0</span> habits today</p>
+      <div class="streak" aria-label="Current streak">
+        <div class="streak-num" id="streakNum">0</div>
+        <div class="streak-label">Day Streak</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="note" aria-label="Note">
+    Keep every habit in a single file. Data is saved locally in your browser.
+  </footer>
+
+<script>
+(function() {
+  const STORAGE_KEY = 'pythios_habits_v1';
+  const GOAL_KEY = 'pythios_goal_v1';
+  const STREAK_KEY = 'pythios_streak_v1';
+
+  let habits = [];
+  let goalDone = false;
+  let streak = 0;
+  let todayStr = new Date().toISOString().split('T')[0];
+
+  function init() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const goalRaw = localStorage.getItem(GOAL_KEY);
+    const streakRaw = localStorage.getItem(STREAK_KEY);
+
+    if (raw) {
+      try { habits = JSON.parse(raw); } catch (e) { habits = []; }
+    } else {
+      habits = [
+        { id: 1, text: 'Drink water', completed: true },
+        { id: 2, text: 'Drink water', completed: true },
+        { id: 3, text: 'Read', completed: false },
+        { id: 4, text: 'Exercise', completed: false },
+        { id: 5, text: 'Meditate', completed: false },
+      ];
+    }
+
+    if (goalRaw) {
+      try {
+        const gd = JSON.parse(goalRaw);
+        goalDone = gd.done || false;
+      } catch (e) { goalDone = false; }
+    }
+
+    if (streakRaw) {
+      try {
+        const sr = JSON.parse(streakRaw);
+        if (sr.date === todayStr) streak = sr.count || 0;
+        else streak = 0;
+      } catch (e) { streak = 0; }
+    }
+
+    save();
+    render();
+  }
+
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
+    localStorage.setItem(GOAL_KEY, JSON.stringify({ done: goalDone, date: todayStr }));
+    localStorage.setItem(STREAK_KEY, JSON.stringify({ count: streak, date: todayStr }));
+  }
+
+  function render() {
+    const completed = habits.filter(h => h.completed);
+    const pending = habits.filter(h => !h.completed);
+
+    // Completed list
+    const completedList = document.getElementById('completedList');
+    completedList.innerHTML = '';
+    completed.forEach(h => {
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <input type="checkbox" class="habit-check" checked onchange="toggleHabit(${h.id})" aria-label="Uncheck ${h.text}" />
+        <span class="habit-label completed">${escapeHtml(h.text)}</span>
+        <button class="delete-btn" onclick="deleteHabit(${h.id})" aria-label="Delete ${h.text}">×</button>
+      `;
+      completedList.appendChild(li);
+    });
+    if (completed.length === 0) {
+      completedList.innerHTML = '<li style="opacity:0.6;font-style:italic;">No completed habits yet.</li>';
+    }
+
+    // Pending list
+    const pendingList = document.getElementById('pendingList');
+    pendingList.innerHTML = '';
+    pending.forEach(h => {
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <input type="checkbox" class="habit-check" onchange="toggleHabit(${h.id})" aria-label="Check ${h.text}" />
+        <span class="habit-label">${escapeHtml(h.text)}</span>
+        <button class="delete-btn" onclick="deleteHabit(${h.id})" aria-label="Delete ${h.text}">×</button>
+      `;
+      pendingList.appendChild(li);
+    });
+    if (pending.length === 0) {
+      pendingList.innerHTML = '<li style="opacity:0.6;font-style:italic;">All habits completed — great work!</li>';
+    }
+
+    // Progress ring
+    const total = habits.length || 1;
+    const done = completed.length;
+    const percent = Math.round((done / total) * 100);
+    const circumference = 2 * Math.PI * 70; // r=70
+    const offset = circumference - (percent / 100) * circumference;
+    const ring = document.getElementById('progressRing');
+    ring.style.strokeDashoffset = offset;
+    ring.style.stroke = done === total ? 'var(--green)' : 'var(--red)';
+
+    document.getElementById('progressLabel').textContent = done + ' / ' + total;
+    document.getElementById('fraction').textContent = done + ' / ' + total;
+
+    // Streak
+    document.getElementById('streakNum').textContent = streak;
+
+    // Goal button state
+    const btn = document.querySelector('.achieved-btn');
+    if (goalDone) {
+      btn.innerHTML = '<span>Done!</span> <span class="heart" aria-hidden="true">&#10084;</span>';
+      btn.style.background = 'var(--green)';
+      btn.style.color = 'white';
+    } else {
+      btn.innerHTML = '<span>Achieved</span> <span class="heart" aria-hidden="true">&#10084;</span>';
+      btn.style.background = 'var(--green-light)';
+      btn.style.color = 'var(--green)';
+    }
+  }
+
+  window.toggleHabit = function(id) {
+    const h = habits.find(h => h.id === id);
+    if (!h) return;
+    h.completed = !h.completed;
+    if (h.completed) streak = (streak || 0) + 1; else if (streak > 0) streak -= 1;
+    // If all completed today, keep streak positive; if any incomplete, don't inflate
+    save(); render();
+  };
+
+  window.deleteHabit = function(id) {
+    habits = habits.filter(h => h.id !== id);
+    save(); render();
+  };
+
+  window.addHabit = function(e) {
+    e.preventDefault();
+    const input = document.getElementById('newHabitInput');
+    const text = input.value.trim();
+    if (!text) return;
+    habits.push({ id: Date.now(), text, completed: false });
+    input.value = '';
+    save(); render();
+    input.focus();
+  };
+
+  window.markGoalDone = function() {
+    goalDone = true;
+    streak = (streak || 0) + 1;
+    save(); render();
+  };
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
