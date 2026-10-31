@@ -225,6 +225,17 @@ export function GeneratedRenderer() {
           </motion.div>
         ))}
       </motion.div>
+      <p className="project-archive-note">
+        Published project source is archived in the{' '}
+        <a
+          href="https://github.com/Advaith0611/Delphi/tree/main/generated-projects"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Pythios GitHub repository
+        </a>
+        .
+      </p>
     </aside>
   )
 }

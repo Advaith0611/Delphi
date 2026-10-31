@@ -98,6 +98,9 @@
 .project-control p { margin:8px 0 0; color:var(--muted); font-size:12px; line-height:1.35; }
 .agent-activity ol { display:grid; gap:6px; max-height:190px; overflow:auto; margin:0; padding-left:20px; color:var(--muted); font:400 12px/1.35 var(--mono); }
 .preview-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; padding-bottom:24px; }
+.project-archive-note { margin:0 0 8px; padding:12px 2px 4px; border-top:1px solid var(--line); color:var(--muted); font-size:11px; line-height:1.45; }
+.project-archive-note a { color:var(--gold); text-decoration:none; }
+.project-archive-note a:hover { color:var(--orange); text-decoration:underline; }
 .preview-card { min-height:126px; border:1px solid var(--line); border-radius:8px; background:linear-gradient(145deg,rgba(23,18,14,.98),rgba(13,11,9,.92)); padding:15px; transition:transform 160ms ease,border-color 160ms ease,background 160ms ease; }
 .preview-card:hover { transform:translateY(-2px); border-color:var(--gold-soft); background:linear-gradient(145deg,rgba(31,23,16,.98),rgba(13,11,9,.95)); }
 .wide-card { grid-column:1 / -1; }
