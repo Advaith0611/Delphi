@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Maze</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Outfit:wght@300;400;600&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #1a1025 0%, #2d1b3a 50%, #1a1025 100%);
+      font-family: 'Outfit', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      color: #e8dac7;
+    }
+
+    /* Subtle background texture */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 40px,
+        rgba(255,255,255,0.015) 40px,
+        rgba(255,255,255,0.015) 41px
+      );
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Floating particles */
+    .particle {
+      position: fixed;
+      width: 3px; height: 3px;
+      background: rgba(212, 175, 140, 0.35);
+      border-radius: 50%;
+      pointer-events: none;
+      animation: floatUp linear infinite;
+      z-index: 0;
+    }
+    @keyframes floatUp {
+      0% { transform: translateY(110vh) translateX(0); opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { transform: translateY(-10vh) translateX(30px); opacity: 0; }
+    }
+
+    .game-wrapper {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+    }
+
+    header {
+      text-align: center;
+    }
+
+    h1 {
+      font-family: 'Cinzel', serif;
+      font-size: 3.2rem;
+      font-weight: 700;
+      letter-spacing: 6px;
+      color: #f0d8a8;
+      text-shadow:
+        0 0 30px rgba(212, 175, 140, 0.35),
+        0 0 60px rgba(212, 175, 140, 0.2),
+        0 4px 8px rgba(0,0,0,0.6);
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 1.05rem;
+      font-weight: 300;
+      color: rgba(232, 218, 199, 0.55);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    .canvas-card {
+      position: relative;
+      background: #1e1528;
+      border-radius: 20px;
+      padding: 16px;
+      box-shadow:
+        0 0 0 1px rgba(212, 175, 140, 0.12),
+        0 25px 60px rgba(0, 0, 0, 0.6),
+        inset 0 1px 0 rgba(255,255,255,0.03);
+      transition: box-shadow 0.4s ease;
+    }
+    .canvas-card:hover {
+      box-shadow:
+        0 0 0 1px rgba(212, 175, 140, 0.2),
+        0 30px 80px rgba(0, 0, 0, 0.7),
+        inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+
+    canvas {
+      display: block;
+      border-radius: 12px;
+      background: #eaddb8;
+      cursor: crosshair;
+      touch-action: none;
+      box-shadow: inset 0 0 60px rgba(0,0,0,0.15);
+    }
+
+    .controls {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+
+    button {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 14px 32px;
+      border-radius: 50px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      color: #1a1025;
+      background: linear-gradient(135deg, #d4af8c 0%, #c9986a 100%);
+      box-shadow:
+        0 4px 20px rgba(212, 175, 140, 0.25),
+        0 0 0 1px rgba(255,255,255,0.1) inset;
+      position: relative;
+      overflow: hidden;
+    }
+    button::after {
+      content: '';
+      position: absolute;
+      top: -50%; left: -50%;
+      width: 200%; height: 200%;
+      background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.15) 50%, transparent 70%);
+      transform: translateX(-100%) rotate(45deg);
+      transition: transform 0.6s ease;
+    }
+    button:hover::after {
+      transform: translateX(100%) rotate(45deg);
+    }
+    button:hover {
+      transform: translateY(-3px);
+      box-shadow:
+        0 8px 30px rgba(212, 175, 140, 0.35),
+        0 0 0 1px rgba(255,255,255,0.15) inset;
+      background: linear-gradient(135deg, #e0c098 0%, #d4af8c 100%);
+    }
+    button:active { transform: translateY(-1px); }
+
+    /* Start / End labels drawn on canvas only */
+    .status-msg {
+      min-height: 1.5rem;
+      font-size: 0.95rem;
+      color: rgba(232, 218, 199, 0.6);
+      letter-spacing: 1px;
+      transition: all 0.3s ease;
+    }
+    .status-msg.success {
+      color: #8fd48a;
+      font-weight: 600;
+      font-size: 1.15rem;
+      text-shadow: 0 0 20px rgba(143, 212, 138, 0.3);
+    }
+
+    @media (max-width: 720px) {
+      h1 { font-size: 2.2rem; letter-spacing: 3px; }
+      .subtitle { font-size: 0.85rem; }
+      .game-wrapper { gap: 16px; }
+      button { padding: 12px 24px; font-size: 0.8rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background particles -->
+  <script>
+    for (let i = 0; i < 18; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      p.style.left = Math.random() * 100 + 'vw';
+      p.style.animationDuration = (12 + Math.random() * 18) + 's';
+      p.style.animationDelay = (Math.random() * 10) + 's';
+      document.body.appendChild(p);
+    }
+  </script>
+
+  <div class="game-wrapper">
+    <header>
+      <h1>The Maze</h1>
+      <p class="subtitle">Draw your path without crossing walls</p>
+    </header>
+
+    <div class="canvas-card">
+      <canvas id="mazeCanvas" width="720" height="560"></canvas>
+    </div>
+
+    <div class="controls">
+      <button onclick="resetMaze()">Reset Path</button>
+      <button onclick="clearPath()">Clear</button>
+    </div>
+
+    <p id="status" class="status-msg">Draw from <strong>start</strong> to <strong>end</strong> — don't touch walls</p>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('mazeCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('status');
+
+    // Maze layout based on whiteboard image (scaled to canvas)
+    // 0 = open path, 1 = wall
+    const MAZE_COLS = 28;
+    const MAZE_ROWS = 22;
+    const CELL_W = 720 / MAZE_COLS;  // ~25.7
+    const CELL_H = 560 / MAZE_ROWS;  // ~25.5
+
+    // Wall grid: 1 = wall, 0 = open path
+    // Solvable maze layout matching the whiteboard image
+    const walls = [
+      // Row 0 - top border with a gap near end
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+      // Row 1 - end zone row
+      [1,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0],
+      // Row 2
+      [1,0,1,1,0,1,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,0],
+      // Row 3
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
+      // Row 4
+      [1,1,1,1,0,1,0,0,0,1,0,0,0,0,1,1,0,0,1,0,1,0,0,0,1,0,0,0],
+      // Row 5
+      [0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0],
+      // Row 6
+      [1,1,0,1,0,1,1,1,1,1,0,1,0,0,1,0,0,1,1,1,1,1,0,1,1,0,0,0],
+      // Row 7
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      // Row 8
+      [1,1,1,1,1,0,1,0,0,1,0,0,1,1,0,1,0,1,0,0,1,1,0,1,1,0,0,0],
+      // Row 9
+      [0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      // Row 10
+      [1,1,1,1,1,0,1,0,1,1,0,0,1,1,1,1,1,1,0,1,1,0,1,1,1,0,0,0],
+      // Row 11
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      // Row 12
+      [1,1,1,1,0,1,1,0,1,0,0,1,1,0,1,0,1,0,1,0,0,1,1,0,1,0,0,0],
+      // Row 13
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      // Row 14
+      [1,1,0,1,1,1,0,1,0,1,0,0,0,1,0,1,0,1,0,1,1,0,1,1,1,0,1,0],
+      // Row 15
+      [0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      // Row 16
+      [1,1,1,0,1,1,1,1,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,1,0,1,0,0],
+      // Row 17
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
+      // Row 18
+      [1,1,0,1,0,1,0,1,1,1,0,0,1,1,1,0,1,1,1,0,1,0,0,0,1,0,0,0],
+      // Row 19
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0],
+      // Row 20
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      // Row 21 - bottom border (start row)
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    ];
+
+    // Start point (bottom-left open area) and End point (top-right open area)
+    const startCol = 1, startRow = 20;  // open cell near bottom left
+    const endCol = 26, endRow = 1;     // open cell near top right
+
+    let isDrawing = false;
+    let pathPoints = [];
+    let currentSegment = [];
+    let hasReachedEnd = false;
+
+    // Draw the maze background
+    function drawMaze() {
+      // Background
+      ctx.fillStyle = '#f5eed8';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw walls (dark charcoal with texture)
+      for (let r = 0; r < MAZE_ROWS; r++) {
+        for (let c = 0; c < MAZE_COLS; c++) {
+          if (walls[r][c] === 1) {
+            const px = c * CELL_W;
+            const py = r * CELL_H;
+            // Wall with slight gradient and shadow for depth
+            const grad = ctx.createLinearGradient(px, py, px + CELL_W, py + CELL_H);
+            grad.addColorStop(0, '#3a3028');
+            grad.addColorStop(0.5, '#2a2218');
+            grad.addColorStop(1, '#3a3028');
+            ctx.fillStyle = grad;
+            ctx.fillRect(px + 0.5, py + 0.5, CELL_W - 1, CELL_H - 1);
+            // Subtle inner highlight
+            ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+            ctx.lineWidth = 0.5;
+            ctx.strokeRect(px + 2, py + 2, CELL_W - 5, CELL_H - 5);
+          }
+        }
+      }
+
+      // Draw grid lines subtly for open cells
+      ctx.strokeStyle = 'rgba(180, 160, 130, 0.15)';
+      ctx.lineWidth = 0.5;
+      for (let c = 0; c <= MAZE_COLS; c++) {
+        ctx.beginPath();
+        ctx.moveTo(c * CELL_W, 0);
+        ctx.lineTo(c * CELL_W, canvas.height);
+        ctx.stroke();
+      }
+      for (let r = 0; r <= MAZE_ROWS; r++) {
+        ctx.beginPath();
+        ctx.moveTo(0, r * CELL_H);
+        ctx.lineTo(canvas.width, r * CELL_H);
+        ctx.stroke();
+      }
+
+      // Draw start indicator
+      const sx = startCol * CELL_W + CELL_W / 2;
+      const sy = startRow * CELL_H + CELL_H / 2;
+      const startGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, CELL_W / 2.5);
+      startGrad.addColorStop(0, '#8fd48a');
+      startGrad.addColorStop(0.5, '#5ab85a');
+      startGrad.addColorStop(1, '#3a6b3a');
+      ctx.fillStyle = startGrad;
+      ctx.beginPath();
+      ctx.arc(sx, sy, CELL_W / 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 13px "Outfit", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Start', sx, sy + 22);
+
+      // Draw end indicator
+      const ex = endCol * CELL_W + CELL_W / 2;
+      const ey = endRow * CELL_H + CELL_H / 2;
+      const endGrad = ctx.createRadialGradient(ex, ey, 0, ex, ey, CELL_W / 2.5);
+      endGrad.addColorStop(0, '#e8b878');
+      endGrad.addColorStop(0.5, '#d4a060');
+      endGrad.addColorStop(1, '#a07040');
+      ctx.fillStyle = endGrad;
+      ctx.beginPath();
+      ctx.arc(ex, ey, CELL_W / 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 13px "Outfit", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('End', ex, ey + 22);
+    }
+
+    // Convert pixel to cell coordinate
+    function pixelToCell(x, y) {
+      return {
+        col: Math.floor(x / CELL_W),
+        row: Math.floor(y / CELL_H)
+      };
+    }
+
+    // Check if a point hits a wall
+    function isWallAt(x, y) {
+      const cell = pixelToCell(x, y);
+      if (cell.col < 0 || cell.col >= MAZE_COLS || cell.row < 0 || cell.row >= MAZE_ROWS) return true;
+      return walls[cell.row][cell.col] === 1;
+    }
+
+    // Check if new line segment intersects existing path (excluding current segment being drawn)
+    function segmentIntersectsPath(x1, y1, x2, y2) {
+      // Check against all completed segments in pathPoints
+      for (let i = 0; i < pathPoints.length - 1; i += 2) {
+        const sx1 = pathPoints[i];
+        const sy1 = pathPoints[i + 1];
+        const sx2 = pathPoints[i + 2] || sx1;
+        const sy2 = pathPoints[i + 3] || sy1;
+        // Check line intersection
+        if (linesIntersect(x1, y1, x2, y2, sx1, sy1, sx2, sy2)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function linesIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
+      const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+      if (Math.abs(denom) < 0.001) return false;
+      const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+      const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
+      return (t >= 0 && t <= 1 && u >= 0 && u <= 1);
+    }
+
+    // Check if point is close to end zone
+    function checkEndReached(x, y) {
+      const ex = endCol * CELL_W + CELL_W / 2;
+      const ey = endRow * CELL_H + CELL_H / 2;
+      const dx = x - ex;
+      const dy = y - ey;
+      return Math.sqrt(dx * dx + dy * dy) < CELL_W / 2.5;
+    }
+
+    // Redraw everything
+    function redraw() {
+      drawMaze();
+      // Draw completed path segments
+      if (pathPoints.length >= 4) {
+        ctx.save();
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#5a6e8c';
+        ctx.beginPath();
+        ctx.moveTo(pathPoints[0], pathPoints[1]);
+        for (let i = 2; i < pathPoints.length; i += 2) {
+          ctx.lineTo(pathPoints[i], pathPoints[i + 1]);
+        }
+        ctx.stroke();
+        // Glow
+        ctx.shadowColor = 'rgba(90, 110, 140, 0.3)';
+        ctx.shadowBlur = 8;
+        ctx.stroke();
+        ctx.restore();
+      }
+      // Draw current drawing segment
+      if (currentSegment.length >= 4) {
+        ctx.save();
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#8fb8d8';
+        ctx.shadowColor = 'rgba(143, 184, 216, 0.4)';
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.moveTo(currentSegment[0], currentSegment[1]);
+        for (let i = 2; i < currentSegment.length; i += 2) {
+          ctx.lineTo(currentSegment[i], currentSegment[i + 1]);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // Handle pointer events
+    function getPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+      const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+      return { x, y };
+    }
+
+    function startDrawing(e) {
+      if (hasReachedEnd) return;
+      e.preventDefault();
+      isDrawing = true;
+      const pos = getPos(e);
+      currentSegment = [pos.x, pos.y];
+      redraw();
+    }
+
+    function moveDrawing(e) {
+      if (!isDrawing || hasReachedEnd) return;
+      e.preventDefault();
+      const pos = getPos(e);
+      const lastX = currentSegment[currentSegment.length - 2];
+      const lastY = currentSegment[currentSegment.length - 1];
+
+      // Check if new point hits wall
+      if (isWallAt(pos.x, pos.y)) {
+        // Stop drawing at wall
+        return;
+      }
+
+      // Check if line from last point to new point crosses existing path
+      if (segmentIntersectsPath(lastX, lastY, pos.x, pos.y)) {
+        // Block crossing own path - don't add point
+        return;
+      }
+
+      currentSegment.push(pos.x, pos.y);
+      redraw();
+
+      // Check end reached
+      if (checkEndReached(pos.x, pos.y)) {
+        isDrawing = false;
+        hasReachedEnd = true;
+        pathPoints = pathPoints.concat(currentSegment);
+        currentSegment = [];
+        redraw();
+        statusEl.textContent = 'You solved the maze!';
+        statusEl.classList.add('success');
+      }
+    }
+
+    function endDrawing() {
+      if (!isDrawing) return;
+      isDrawing = false;
+      if (currentSegment.length >= 4) {
+        pathPoints = pathPoints.concat(currentSegment);
+      } else if (currentSegment.length === 2) {
+        pathPoints.push(currentSegment[0], currentSegment[1]);
+      }
+      currentSegment = [];
+      redraw();
+    }
+
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', moveDrawing);
+    canvas.addEventListener('mouseup', endDrawing);
+    canvas.addEventListener('mouseleave', endDrawing);
+    canvas.addEventListener('touchstart', startDrawing, { passive: false });
+    canvas.addEventListener('touchmove', moveDrawing, { passive: false });
+    canvas.addEventListener('touchend', endDrawing);
+    canvas.addEventListener('touchcancel', endDrawing);
+
+    function resetMaze() {
+      pathPoints = [];
+      currentSegment = [];
+      isDrawing = false;
+      hasReachedEnd = false;
+      statusEl.textContent = 'Draw from start to end — don\'t touch walls';
+      statusEl.classList.remove('success');
+      redraw();
+    }
+
+    function clearPath() {
+      resetMaze();
+    }
+
+    // Initialize
+    redraw();
+  </script>
+</body>
+</html>
