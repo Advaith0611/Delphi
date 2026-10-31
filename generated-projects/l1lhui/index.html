@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pendulum Simulation</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: linear-gradient(135deg, #f5e9cf 0%, #e8d4a8 100%);
+    color: #2b2b2b;
+  }
+  #stage {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+  }
+  /* Panel */
+  #panel {
+    position: absolute;
+    top: 24px; right: 28px;
+    width: 320px;
+    background: rgba(255, 255, 255, 0.85);
+    border: 3px solid #4a4a4a;
+    border-radius: 18px;
+    padding: 22px 24px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+    z-index: 10;
+    user-select: none;
+  }
+  #panel h2 { margin: 0 0 16px; font-size: 18px; text-align: center; letter-spacing: 0.5px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #3a3a3a; }
+  .field input {
+    width: 100%; padding: 7px 10px; font-size: 15px;
+    border: 1.5px solid #9a7e54; border-radius: 6px; background: #fffcf5;
+  }
+  .field input:focus { outline: none; border-color: #2a9d8f; }
+  #start {
+    width: 100%; margin-top: 8px; padding: 14px; font-size: 16px; font-weight: 700;
+    color: #1b5e20; background: #a7e9a7; border: 2px solid #1b5e20;
+    border-radius: 10px; cursor: pointer; box-shadow: 0 4px 0 #1b5e20;
+    transition: transform 0.08s;
+  }
+  #start:hover { background: #bff5bf; }
+  #start:active { transform: translateY(3px); box-shadow: none; }
+  #start:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+
+  /* HUD */
+  #hud {
+    position: absolute;
+    bottom: 32px; left: 32px;
+    width: 300px;
+    background: rgba(141, 207, 255, 0.92);
+    border: 3px solid #4a4a4a;
+    border-radius: 14px;
+    padding: 16px 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+    z-index: 10;
+    user-select: none;
+  }
+  #hud h2 { margin: 0 0 12px; font-size: 17px; text-align: center; }
+  .stat { font-size: 16px; margin: 5px 0; font-variant-numeric: tabular-nums; }
+  .stat .val { font-weight: 700; float: right; color: #0d47a1; }
+
+  /* Canvas */
+  #canvas { width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="canvas"></canvas>
+
+  <div id="panel">
+    <h2>Settings</h2>
+    <div class="field">
+      <label>Mass of Bob (kg)</label>
+      <input id="mass" type="number" value="1" min="0.01" step="0.01">
+    </div>
+    <div class="field">
+      <label>Length of string (m)</label>
+      <input id="length" type="number" value="2" min="0.1" max="10" step="0.1">
+    </div>
+    <div class="field">
+      <label>Initial velocity (rad/s)</label>
+      <input id="vel" type="number" value="0" min="-20" max="20" step="0.1">
+    </div>
+    <button id="start">Start Simulation</button>
+  </div>
+
+  <div id="hud">
+    <h2>Pendulum Readout</h2>
+    <div class="stat">Time Period <span class="val" id="period">-- s</span></div>
+    <div class="stat">Current Vel <span class="val" id="cvel">-- rad/s</span></div>
+    <div class="stat">Current Angle <span class="val" id="cangle">-- °</span></div>
+  </div>
+</div>
+<script>
+(function () {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const massIn = document.getElementById('mass');
+  const lengthIn = document.getElementById('length');
+  const velIn = document.getElementById('vel');
+  const startBtn = document.getElementById('start');
+  const periodEl = document.getElementById('period');
+  const cvelEl = document.getElementById('cvel');
+  const cangleEl = document.getElementById('cangle');
+
+  const G = 9.81; // m/s^2
+  let width, height, cx, cy;
+
+  function resize() {
+    width = canvas.width = canvas.clientWidth;
+    height = canvas.height = canvas.clientHeight;
+    cx = width / 2;
+    cy = height * 0.22;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // Pendulum state
+  let angle = 0;        // radians, 0 = straight down
+  let omega = 0;        // angular velocity rad/s
+  let running = false;
+  let lastTime = null;
+  let periodEstimate = null;
+  let lastPeakTime = null;
+  let peakCount = 0;
+
+  function resetState() {
+    const L = parseFloat(lengthIn.value) || 1;
+    // Scale pivot-to-canvas: 1 m = 90 px, clamped so pendulum fits
+    angle = Math.PI / 2; // start from the side (matches whiteboard pose roughly) -- actually initial angle from inputs? Whiteboard shows bob at side.
+    // Better: hang straight down initially
+    angle = 0;
+    omega = parseFloat(velIn.value) || 0;
+    running = true;
+    periodEstimate = null;
+    lastPeakTime = null;
+    peakCount = 0;
+    prevOmega = omega;
+    lastTime = performance.now();
+    startBtn.disabled = true;
+    periodEl.textContent = '-- s';
+    cvelEl.textContent = '-- rad/s';
+    cangleEl.textContent = '-- °';
+  }
+
+  function step(now) {
+    if (!running) return;
+    const dt = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+
+    const m = parseFloat(massIn.value) || 1;
+    const L = Math.max(parseFloat(lengthIn.value) || 1, 0.1);
+
+    // Pendulum dynamics: alpha = -(g/L) * sin(theta); mass cancels out
+    const alpha = -(G / L) * Math.sin(angle);
+    // Semi-implicit Euler integration
+    omega += alpha * dt;
+    angle += omega * dt;
+
+    // Track period: count zero-crossings of angular velocity (extrema of angle)
+    // A full period is measured between same-direction peaks.
+    // HUD updates
+    const absDeg = ((angle * 180 / Math.PI + 540) % 360) - 180;
+    cangleEl.textContent = absDeg.toFixed(1) + ' °';
+    cvelEl.textContent = omega.toFixed(2) + ' rad/s';
+
+    // Period estimation via peak detection
+    detectPeak(now, L);
+
+    draw(m, L);
+    requestAnimationFrame(step);
+  }
+
+  let prevOmega = 0;
+  function detectPeak(now, L) {
+    // Extremum of angle = omega crosses zero
+    const crossed = (prevOmega < 0 && omega > 0) || (prevOmega > 0 && omega < 0);
+    if (crossed) {
+      if (lastPeakTime !== null) {
+        const T = (now - lastPeakTime) / 1000; // time between consecutive extrema = half period
+        const fullT = T * 2;
+        peakCount++;
+        if (peakCount >= 2) {
+          periodEstimate = fullT;
+          periodEl.textContent = periodEstimate.toFixed(2) + ' s';
+        }
+      }
+      lastPeakTime = now;
+    }
+    prevOmega = omega;
+  }
+
+  function draw(m, L) {
+    ctx.clearRect(0, 0, width, height);
+
+    const scale = Math.min(90, (height - 120) / L / 1.5); // px per meter
+    const pxPerMeter = scale;
+    const stringLenPx = L * pxPerMeter;
+
+    const bx = cx + Math.sin(angle) * stringLenPx;
+    const by = cy + Math.cos(angle) * stringLenPx;
+
+    // Pivot
+    ctx.beginPath();
+    ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fill();
+    ctx.strokeStyle = '#4a4a4a';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // String
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(bx, by);
+    ctx.strokeStyle = '#3a3a3a';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Bob (size grows mildly with mass)
+    const bobRadius = 18 + Math.sqrt(Math.max(m, 0.01)) * 7;
+    ctx.beginPath();
+    ctx.arc(bx, by, bobRadius, 0, Math.PI * 2);
+    ctx.fillStyle = running ? '#7ec8ff' : '#bcd6ff';
+    ctx.fill();
+    ctx.strokeStyle = '#1a3a5c';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Velocity vectors at the bob (tangent to motion)
+    // Tangent direction: (cos(angle), -sin(angle)) for increasing angle
+    const tx = Math.cos(angle);
+    const ty = -Math.sin(angle);
+    const v = omega * L; // linear velocity m/s
+    const arrowLen = Math.abs(v) * 14; // px scale
+    const showArrow = arrowLen > 6;
+
+    // Main velocity arrow
+    if (showArrow) {
+      drawArrow(bx, by, bx + tx * arrowLen, by + ty * arrowLen, '#d00000', 4);
+    }
+
+    // Component arrows: horizontal and vertical components of velocity
+    if (showArrow) {
+      const hLen = tx * arrowLen;
+      const vLen = ty * arrowLen;
+      if (Math.abs(hLen) > 6) drawArrow(bx, by, bx + hLen, by, '#1b5e20', 3);
+      if (Math.abs(vLen) > 6) drawArrow(bx, by, bx, by + vLen, '#7b2cbf', 3);
+    }
+
+    // Velocity magnitude label
+    if (showArrow) {
+      ctx.fillStyle = '#1a1a1a';
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(v.toFixed(2) + ' m/s', bx, by - bobRadius - 10);
+    }
+
+    // Equilibrium reference line (vertical down)
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx, cy + stringLenPx);
+    ctx.strokeStyle = 'rgba(74,74,74,0.25)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Angle arc
+    const arcRadius = 55;
+    const startAngle = Math.PI / 2; // straight down in screen coords? We measure from +y axis
+    // Draw arc from vertical down to bob position
+    ctx.beginPath();
+    ctx.arc(cx, cy, arcRadius, Math.PI / 2, Math.PI / 2 + angle, angle < 0);
+    ctx.strokeStyle = '#7b2cbf';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#7b2cbf';
+    ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center';
+    const labX = cx + Math.sin(angle > 0 ? angle / 2 : angle / 2) * (arcRadius + 14);
+    const labY = cy + Math.cos(angle / 2) * (arcRadius + 14);
+    ctx.fillText('θ', labX, labY + 4);
+
+    // Instructions when stopped
+    if (!running) {
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.font = '16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Set mass, length & initial velocity, then press Start Simulation', cx, height / 2 + 60);
+    }
+  }
+
+  function drawArrow(x1, y1, x2, y2, color, width) {
+    const headLen = 10;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const ang = Math.atan2(dy, dx);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - headLen * Math.cos(ang - Math.PI / 6), y2 - headLen * Math.sin(ang - Math.PI / 6));
+    ctx.lineTo(x2 - headLen * Math.cos(ang + Math.PI / 6), y2 - headLen * Math.sin(ang + Math.PI / 6));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Draw the initial static pendulum once. The simulation loop is started
+  // separately so two animation loops cannot overwrite the pendulum state.
+  function drawIdle() {
+    const m = parseFloat(massIn.value) || 1;
+    const L = Math.max(parseFloat(lengthIn.value) || 1, 0.1);
+    angle = 0;
+    draw(m, L);
+  }
+  drawIdle();
+
+  startBtn.addEventListener('click', () => {
+    resetState();
+    requestAnimationFrame(step);
+  });
+
+  // Stop when inputs change while running
+  [massIn, lengthIn, velIn].forEach(inp => {
+    inp.addEventListener('input', () => {
+      if (running) {
+        running = false;
+        startBtn.disabled = false;
+      }
+      drawIdle();
+    });
+  });
+})();
+</script>
+</body>
+</html>

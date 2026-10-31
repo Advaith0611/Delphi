@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tower of Hanoi — Interactive Puzzle</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@300;400;600&display=swap');
+
+  :root {
+    --bg: #f6f3ee;
+    --base: #3e3226;
+    --rod: #7a5c3f;
+    --rod-shadow: #5c422a;
+    --disk-1: #e63946;
+    --disk-2: #457b9d;
+    --disk-3: #2a9d8f;
+    --disk-4: #f4a261;
+    --text: #2a2020;
+    --text-sub: #7a6b5a;
+    --success: #2a9d8f;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+  }
+
+  header {
+    padding: 2rem 1rem 1.5rem;
+    text-align: center;
+  }
+  header h1 {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: clamp(2.2rem, 5vw, 3.2rem);
+    letter-spacing: -0.02em;
+    color: var(--text);
+    text-shadow: 0 2px 0 rgba(0,0,0,.06);
+  }
+  header p.subtitle {
+    margin-top: .35rem;
+    color: var(--text-sub);
+    font-size: .95rem;
+    font-weight: 300;
+  }
+
+  .game-wrap {
+    flex: 1 1 auto;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 100%; max-width: 960px; padding: 0 1rem 2rem;
+  }
+
+  .board {
+    position: relative;
+    width: 100%; max-width: 720px; aspect-ratio: 16 / 10;
+    background: #ede9df;
+    border-radius: 24px;
+    box-shadow:
+      inset 0 0 60px rgba(0,0,0,.08),
+      0 20px 60px rgba(0,0,0,.12),
+      0 4px 10px rgba(0,0,0,.08);
+    overflow: hidden;
+    display: flex; align-items: flex-end; justify-content: space-evenly; padding: 0 2rem 3rem;
+  }
+
+  .base {
+    position: absolute; bottom: 0; left: 10%; right: 10%; height: 28px;
+    background: linear-gradient(to bottom, #5c422a, #3e3226);
+    border-radius: 14px;
+    box-shadow: 0 6px 12px rgba(0,0,0,.25), inset 0 2px 4px rgba(255,255,255,.15);
+  }
+
+  .rod-area {
+    position: relative; width: 90px; height: 100%; display: flex; flex-direction: column; align-items: center;
+  }
+  .rod-stick {
+    width: 14px; height: 70%; background: linear-gradient(to right, #bfa07a, #7a5c3f, #bfa07a);
+    border-radius: 7px; box-shadow: inset -2px 0 3px rgba(255,255,255,.3), 2px 4px 6px rgba(0,0,0,.25);
+    z-index: 1;
+  }
+
+  .disk {
+    position: absolute; z-index: 10;
+    height: 36px; border-radius: 18px;
+    cursor: grab; user-select: none;
+    box-shadow:
+      0 4px 8px rgba(0,0,0,.25),
+      inset 0 2px 3px rgba(255,255,255,.35),
+      inset 0 -2px 3px rgba(0,0,0,.15);
+    transition: transform .15s ease, box-shadow .15s ease;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .65rem; font-weight: 600; letter-spacing: .08em; color: rgba(255,255,255,.9); text-transform: uppercase;
+  }
+  .disk:active { cursor: grabbing; transform: translateY(-4px) scale(1.03); box-shadow: 0 10px 20px rgba(0,0,0,.35), inset 0 2px 3px rgba(255,255,255,.35); }
+  .disk[data-size="large"]  { width: 160px; background: linear-gradient(to bottom, #e63946 0%, #c1121f 100%); }
+  .disk[data-size="medium"] { width: 120px; background: linear-gradient(to bottom, #457b9d 0%, #1d3557 100%); }
+  .disk[data-size="small"]  { width: 80px;  background: linear-gradient(to bottom, #2a9d8f 0%, #1b6e62 100%); }
+  .disk[data-size="tiny"]   { width: 60px;  background: linear-gradient(to bottom, #f4a261 0%, #c9883a 100%); }
+
+  .rod-label {
+    position: absolute; bottom: 36px; font-size: .7rem; font-weight: 600; color: var(--text-sub); letter-spacing: .05em;
+  }
+
+  .info-strip {
+    display: flex; gap: 2rem; align-items: center; justify-content: center; margin-top: 1.2rem;
+  }
+  .badge {
+    background: #fff; padding: .5rem 1rem; border-radius: 999px; box-shadow: 0 2px 8px rgba(0,0,0,.06); font-weight: 600; font-size: .85rem; color: var(--text);
+  }
+  .badge .label { color: var(--text-sub); font-weight: 400; font-size: .75rem; }
+
+  .success-banner {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-120%);
+    background: linear-gradient(to right, #2a9d8f, #43aa8b);
+    color: #fff; padding: .9rem 1.6rem; border-radius: 999px;
+    box-shadow: 0 10px 30px rgba(42,157,143,.4); font-weight: 600; font-size: 1.05rem;
+    letter-spacing: .02em; z-index: 100; transition: transform .6s cubic-bezier(.34,1.56,.64,1);
+  }
+  .success-banner.show { transform: translateX(-50%) translateY(0); }
+
+  .reset-btn {
+    margin-top: 1rem; padding: .65rem 1.4rem; border: none; border-radius: 999px;
+    background: var(--base); color: #fff; font-family: inherit; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(62,50,38,.3); transition: transform .1s, box-shadow .2s;
+  }
+  .reset-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(62,50,38,.35); }
+  .reset-btn:active { transform: translateY(0); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tower of Hanoi</h1>
+  <p class="subtitle">Drag the disks. Only smaller disks may rest on larger ones.</p>
+</header>
+
+<main class="game-wrap" aria-label="Tower of Hanoi board">
+  <div class="board" id="board" role="region" aria-label="Game board">
+    <div class="base" aria-hidden="true"></div>
+
+    <!-- Rod 1 -->
+    <div class="rod-area" data-rod="0" aria-label="Left rod" role="region">
+      <div class="rod-stick" aria-hidden="true"></div>
+      <span class="rod-label">Rod 1</span>
+    </div>
+
+    <!-- Rod 2 -->
+    <div class="rod-area" data-rod="1" aria-label="Middle rod" role="region">
+      <div class="rod-stick" aria-hidden="true"></div>
+      <span class="rod-label">Rod 2</span>
+    </div>
+
+    <!-- Rod 3 -->
+    <div class="rod-area" data-rod="2" aria-label="Right rod" role="region">
+      <div class="rod-stick" aria-hidden="true"></div>
+      <span class="rod-label">Rod 3</span>
+    </div>
+  </div>
+
+  <div class="info-strip" aria-label="Game status">
+    <div class="badge"><span class="label">Moves</span> <span id="moveCount">0</span></div>
+    <div class="badge"><span class="label">Target</span> Rod 3</div>
+  </div>
+
+  <button class="reset-btn" onclick="resetGame()">Reset</button>
+</main>
+
+<div class="success-banner" id="banner" role="alert" aria-live="polite">🎉 You solved the Tower of Hanoi!</div>
+
+<script>
+  const STATE = { rods: [[0,1,2], [], []], moves: 0, solved: false };
+  // disk ids: 0=large (bottom), 1=medium, 2=small, 3=tiny (top)
+  // We will render 4 disks for richer play
+  const DISKS = [
+    { id: 0, size: 'large',  label: 'L' },
+    { id: 1, size: 'medium', label: 'M' },
+    { id: 2, size: 'small',  label: 'S' },
+    { id: 3, size: 'tiny',   label: 'T' },
+  ];
+
+  const BOARD = document.getElementById('board');
+  const BANNER = document.getElementById('banner');
+  const MOVE_COUNT = document.getElementById('moveCount');
+
+  function render() {
+    // Clear previous dynamically placed disks from board (keep rods)
+    document.querySelectorAll('.disk').forEach(d => d.remove());
+
+    STATE.rods.forEach((stack, rodIndex) => {
+      const area = document.querySelector('.rod-area[data-rod="'+rodIndex+'"]');
+      // compute bottom offset based on stack length: base is ~28px from bottom, disk height 36px, gap 4px
+      // We place disks bottom-up inside area with absolute positioning
+      const bottomOffset = 28; // above base
+      stack.forEach((diskId, i) => {
+        const d = DISKS.find(x => x.id === diskId);
+        const el = document.createElement('div');
+        el.className = 'disk';
+        el.setAttribute('data-size', d.size);
+        el.setAttribute('data-id', d.id);
+        el.setAttribute('draggable', 'true');
+        el.setAttribute('aria-label', d.size + ' disk');
+        el.textContent = d.label;
+
+        // Position within rod-area
+        const stackHeight = stack.length;
+        const y = bottomOffset + (stackHeight - 1 - i) * 40; // 36px + 4px gap
+        el.style.bottom = y + 'px';
+        el.style.left = '50%';
+        el.style.transform = 'translateX(-50%)';
+
+        // Drag events
+        el.addEventListener('dragstart', onDragStart);
+        el.addEventListener('dragend', onDragEnd);
+
+        area.appendChild(el);
+      });
+    });
+  }
+
+  let dragData = null;
+
+  function onDragStart(e) {
+    const diskEl = e.target;
+    const id = parseInt(diskEl.getAttribute('data-id'));
+    const rod = findRodOfDisk(id);
+    // A disk can only be dragged if it is the top disk on its rod
+    const stack = STATE.rods[rod];
+    if (stack[stack.length - 1] !== id) {
+      e.preventDefault();
+      return;
+    }
+    dragData = { id, rod };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+    diskEl.style.opacity = '.9';
+  }
+
+  function onDragEnd(e) {
+    e.target.style.opacity = '1';
+    dragData = null;
+  }
+
+  function findRodOfDisk(id) {
+    for (let r = 0; r < STATE.rods.length; r++) {
+      if (STATE.rods[r].includes(id)) return r;
+    }
+    return -1;
+  }
+
+  // Enable drop on rod areas
+  document.querySelectorAll('.rod-area').forEach(area => {
+    area.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      area.style.background = 'rgba(42,157,143,.08)';
+    });
+    area.addEventListener('dragleave', () => {
+      area.style.background = 'transparent';
+    });
+    area.addEventListener('drop', e => {
+      e.preventDefault();
+      area.style.background = 'transparent';
+      if (!dragData) return;
+      const targetRod = parseInt(area.getAttribute('data-rod'));
+      const srcRod = dragData.rod;
+      if (srcRod === targetRod) return;
+
+      const fromStack = STATE.rods[srcRod];
+      const toStack = STATE.rods[targetRod];
+      const diskId = dragData.id;
+
+      // Must be top of source
+      if (fromStack[fromStack.length - 1] !== diskId) return;
+
+      // Must be smaller than top of target (or target empty)
+      if (toStack.length > 0) {
+        const topId = toStack[toStack.length - 1];
+        const diskSizeOrder = DISKS.map(d => d.id); // id order: 0 largest -> 3 smallest
+        // We want disk with smaller id (larger physically) cannot go on larger id (smaller physically)
+        // Since id 0=large, 3=tiny: smaller id = larger disk. So allow if diskId > topId (disk is smaller)
+        if (diskId <= topId) return; // illegal
+      }
+
+      // Execute move
+      fromStack.pop();
+      toStack.push(diskId);
+      STATE.moves += 1;
+      STATE.solved = false;
+      MOVE_COUNT.textContent = STATE.moves;
+      render();
+      checkWin();
+    });
+  });
+
+  function checkWin() {
+    if (STATE.rods[2].length === DISKS.length && !STATE.solved) {
+      STATE.solved = true;
+      BANNER.classList.add('show');
+      setTimeout(() => BANNER.classList.remove('show'), 3500);
+    }
+  }
+
+  function resetGame() {
+    STATE.rods = [[0,1,2,3], [], []];
+    STATE.moves = 0;
+    STATE.solved = false;
+    MOVE_COUNT.textContent = '0';
+    BANNER.classList.remove('show');
+    render();
+  }
+
+  // Initialize
+  render();
+</script>
+</body>
+</html>

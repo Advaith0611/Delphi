@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pythios Dashboard — 9hteo1 / io5l50 / l1lhui</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #f3efe6;
+    --ink: #181818;
+    --accent: #bfa15f;
+    --paper: #fffdf5;
+    --border: rgba(0,0,0,0.08);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 2.5rem 2rem 1rem;
+    text-align: center;
+  }
+
+  h1 {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(2.4rem, 6vw, 4rem);
+    letter-spacing: -0.03em;
+    line-height: 0.95;
+    margin: 0 0 0.2em;
+  }
+
+  h1 em { font-style: italic; color: var(--accent); }
+
+  .meta {
+    font-weight: 300;
+    font-size: 0.95rem;
+    color: #6e6858;
+  }
+
+  nav {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 2rem 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  nav button {
+    border: 1.5px solid var(--border);
+    background: var(--paper);
+    color: var(--ink);
+    padding: 0.45rem 1rem;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, transform .05s;
+  }
+
+  nav button.active,
+  nav button:hover {
+    background: var(--ink);
+    color: var(--bg);
+    border-color: var(--ink);
+  }
+  nav button:active { transform: translateY(1px); }
+
+  main {
+    flex: 1;
+    padding: 0 2rem 3rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .card {
+    background: var(--paper);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .card-header {
+    padding: 1rem 1.1rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    padding: 0.15rem 0.45rem;
+    border-radius: 6px;
+    background: #ece7cf;
+    color: #7a6e3a;
+  }
+
+  .card h2 {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-weight: 400;
+    font-size: 1.25rem;
+    margin: 0 0 0.15rem;
+  }
+
+  .card .url {
+    font-size: 0.78rem;
+    color: #817e6f;
+    word-break: break-all;
+  }
+
+  .card iframe {
+    flex: 1;
+    min-height: 420px;
+    width: 100%;
+    border: none;
+    background: #fff;
+  }
+
+  .focus-mode {
+    display: none;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .focus-mode.active { display: flex; }
+
+  .focus-mode .card iframe { min-height: 70vh; }
+
+  .note {
+    padding: 1.25rem;
+    background: #f8f4e8;
+    border-left: 3px solid var(--accent);
+    border-radius: 10px;
+    font-size: 0.85rem;
+    color: #5c5748;
+  }
+
+  footer {
+    text-align: center;
+    padding: 2rem;
+    font-size: 0.78rem;
+    color: #86816e;
+  }
+
+  @media (max-width: 640px) {
+    .grid { grid-template-columns: 1fr; }
+    .card iframe { min-height: 320px; }
+    nav button { padding: 0.4rem 0.85rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Pythios <em>Dashboard</em></h1>
+  <p class="meta">Centralized hub for projects 9hteo1 · io5l50 · l1lhui</p>
+</header>
+
+<nav aria-label="View toggle">
+  <button class="active" onclick="setMode('all')">All projects</button>
+  <button onclick="setMode('9hteo1')">9hteo1</button>
+  <button onclick="setMode('io5l50')">io5l50</button>
+  <button onclick="setMode('l1lhui')">l1lhui</button>
+</nav>
+
+<main>
+  <div id="allView" class="grid">
+    <article class="card" aria-label="Project 9hteo1">
+      <div class="card-header">
+        <div>
+          <h2>9hteo1</h2>
+          <div class="url">https://app.pythios.xyz/9hteo1/</div>
+        </div>
+        <span class="badge">Project</span>
+      </div>
+      <iframe src="https://app.pythios.xyz/9hteo1/" title="9hteo1" loading="lazy"></iframe>
+    </article>
+
+    <article class="card" aria-label="Project io5l50">
+      <div class="card-header">
+        <div>
+          <h2>io5l50</h2>
+          <div class="url">https://app.pythios.xyz/io5l50/</div>
+        </div>
+        <span class="badge">Project</span>
+      </div>
+      <iframe src="https://app.pythios.xyz/io5l50/" title="io5l50" loading="lazy"></iframe>
+    </article>
+
+    <article class="card" aria-label="Project l1lhui">
+      <div class="card-header">
+        <div>
+          <h2>l1lhui</h2>
+          <div class="url">https://app.pythios.xyz/l1lhui/</div>
+        </div>
+        <span class="badge">Project</span>
+      </div>
+      <iframe src="https://app.pythios.xyz/l1lhui/" title="l1lhui" loading="lazy"></iframe>
+    </article>
+  </div>
+
+  <div id="focusViews" class="focus-mode" aria-label="Focused project view">
+    <article class="card" id="f-9hteo1" aria-label="Project 9hteo1 focused">
+      <div class="card-header">
+        <div><h2>9hteo1</h2><div class="url">https://app.pythios.xyz/9hteo1/</div></div>
+        <span class="badge">Project</span>
+      </div>
+      <iframe src="https://app.pythios.xyz/9hteo1/" title="9hteo1 focused" loading="lazy"></iframe>
+    </article>
+    <article class="card" id="f-io5l50" aria-label="Project io5l50 focused">
+      <div class="card-header">
+        <div><h2>io5l50</h2><div class="url">https://app.pythios.xyz/io5l50/</div></div>
+        <span class="badge">Project</span>
+      </div>
+      <iframe src="https://app.pythios.xyz/io5l50/" title="io5l50 focused" loading="lazy"></iframe>
+    </article>
+    <article class="card" id="f-l1lhui" aria-label="Project l1lhui focused">
+      <div class="card-header">
+        <div><h2>l1lhui</h2><div class="url">https://app.pythios.xyz/l1lhui/</div></div>
+        <span class="badge">Project</span>
+      </div>
+      <iframe src="https://app.pythios.xyz/l1lhui/" title="l1lhui focused" loading="lazy"></iframe>
+    </article>
+  </div>
+
+  <div class="note" style="margin-top:1.5rem;">
+    <strong>Note on iframes:</strong> Some external sites set <code>X-Frame-Options</code> or CSP headers that prevent embedding. If a project iframe appears blank, open the link directly in a new tab — the URL is correct and the dashboard points to the authoritative source for each module.
+  </div>
+</main>
+
+<footer>
+  Pythios Dashboard — projects 9hteo1 · io5l50 · l1lhui · aggregated via iframes
+</footer>
+
+<script>
+  function setMode(mode) {
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    // Find button with matching text content roughly
+    const labels = { all: 'All projects', '9hteo1': '9hteo1', io5l50: 'io5l50', l1lhui: 'l1lhui' };
+    document.querySelectorAll('nav button').forEach(b => {
+      if (b.textContent.trim() === labels[mode]) b.classList.add('active');
+    });
+
+    const allEl = document.getElementById('allView');
+    const focusEl = document.getElementById('focusViews');
+
+    if (mode === 'all') {
+      allEl.style.display = 'grid';
+      focusEl.classList.remove('active');
+      // Hide individual focused cards unless needed; keep all grid visible
+      ['f-9hteo1','f-io5l50','f-l1lhui'].forEach(id => {
+        document.getElementById(id).style.display = 'none';
+      });
+    } else {
+      allEl.style.display = 'none';
+      focusEl.classList.add('active');
+      // Show only selected focused card
+      ['f-9hteo1','f-io5l50','f-l1lhui'].forEach(id => {
+        document.getElementById(id).style.display = (id === 'f-' + mode) ? 'flex' : 'none';
+      });
+    }
+  }
+</script>
+</body>
+</html>
