@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interactive Triangle Area Calculator</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  :root {
+    --bg: #0f1220;
+    --surface: #161b2e;
+    --surface-2: #1e2640;
+    --text: #e8ecf1;
+    --text-dim: #8b95a8;
+    --accent: #58e0a8;
+    --accent-2: #56c4f0;
+    --line: #293a5a;
+    --line-light: #334b72;
+    --danger: #f0647a;
+    --shadow: 0 12px 32px rgba(0,0,0,0.45);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 28px 32px;
+    background: linear-gradient(180deg, #13172b 0%, #0f1220 100%);
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -1.2px;
+    background: linear-gradient(135deg, #58e0a8 0%, #56c4f0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  header p {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 15px;
+  }
+
+  .layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* Canvas area */
+  .canvas-wrap {
+    flex: 1 1 auto;
+    position: relative;
+    overflow: hidden;
+    background: radial-gradient(circle at 50% 50%, #11152a 0%, #0a0d16 100%);
+  }
+  canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+
+  /* Side panel */
+  aside {
+    width: 340px;
+    background: var(--surface);
+    border-left: 1px solid var(--line);
+    padding: 28px 28px 28px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    overflow-y: auto;
+  }
+
+  .section { background: var(--surface-2); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+  .section h2 {
+    margin: 0 0 14px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    font-weight: 700;
+  }
+
+  /* Area big number */
+  .area-big {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 42px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: -2px;
+    line-height: 1;
+    word-break: break-all;
+  }
+  .area-label {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  /* Formula */
+  .formula-box {
+    background: #0d1118;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 15px;
+    color: var(--accent-2);
+    line-height: 1.55;
+  }
+  .formula-box .var { color: var(--accent); }
+
+  /* Vertex rows */
+  .vertex-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .vertex-row:last-child { border-bottom: none; }
+  .dot {
+    width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 8px currentColor;
+  }
+  .dot-a { background: var(--accent); color: var(--accent); }
+  .dot-b { background: var(--accent-2); color: var(--accent-2); }
+  .dot-c { background: #d4946e; color: #d4946e; }
+  .v-label { font-weight: 700; width: 22px; font-size: 12px; color: var(--text-dim); }
+  .v-coords { font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--text); flex: 1; }
+
+  /* Instruction hint */
+  .hint {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+  .hint strong { color: var(--text); }
+
+  /* Footer */
+  footer {
+    padding: 12px 32px;
+    border-top: 1px solid var(--line);
+    background: #0b0e16;
+    font-size: 12px;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Triangle Area — Interactive</h1>
+  <p>Drag the vertices on the grid. Watch the area update in real time.</p>
+</header>
+
+<div class="layout">
+  <div class="canvas-wrap">
+    <canvas id="gridCanvas"></canvas>
+  </div>
+
+  <aside>
+    <section class="section" aria-label="Area result">
+      <h2>Calculated Area</h2>
+      <div class="area-big" id="areaDisplay" aria-live="polite">0.00</div>
+      <div class="area-label">square units</div>
+    </section>
+
+    <section class="section" aria-label="Formula">
+      <h2>Shoelace Formula</h2>
+      <div class="formula-box" id="formulaBox">
+        Area = 0.5 · |x₁(y₂ − y₃) + x₂(y₃ − y₁) + x₃(y₁ − y₂)|
+      </div>
+    </section>
+
+    <section class="section" aria-label="Vertex coordinates">
+      <h2>Vertex Coordinates</h2>
+      <div id="verticesList"></div>
+    </section>
+
+    <section class="section" aria-label="Instructions">
+      <h2>How to Use</h2>
+      <div class="hint">
+        <strong>Drag any dot</strong> on the grid to move a vertex.<br>
+        The triangle lines and shaded area update instantly.<br>
+        The area is computed with the <strong>Shoelace formula</strong> shown above.
+      </div>
+    </section>
+  </aside>
+</div>
+
+<footer>
+  <span>Coordinate plane · Cartesian grid · Drag to interact</span>
+  <span>Built with HTML Canvas + JavaScript</span>
+</footer>
+
+<script>
+// ------------------------------------------------------------------
+// Configuration
+// ------------------------------------------------------------------
+const CANVAS_ID = 'gridCanvas';
+const VERTICES_LIST_ID = 'verticesList';
+const AREA_DISPLAY_ID = 'areaDisplay';
+
+// Three vertices: A, B, C
+let points = [
+  { label: 'A', x: -2, y: 3.5 },
+  { label: 'B', x: 4,   y: 2.5 },
+  { label: 'C', x: 1,   y: -3.5 },
+];
+
+// Drag state
+let dragIndex = -1;
+let offsetX = 0, offsetY = 0;
+
+// Canvas state
+const canvas = document.getElementById(CANVAS_ID);
+const ctx = canvas.getContext('2d');
+let width = 0, height = 0;
+
+// Coordinate mapping parameters (calculated on resize)
+let originX = 0, originY = 0; // in px
+let scale = 1; // px per unit
+
+// ------------------------------------------------------------------
+// Resize & setup
+// ------------------------------------------------------------------
+function resize() {
+  const wrap = canvas.parentElement;
+  width = wrap.clientWidth;
+  height = wrap.clientHeight;
+  // For high-DPI crispness
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  canvas.style.width = width + 'px';
+  canvas.style.height = height + 'px';
+  ctx.setTransform(1, 0, 0, 1, 0, 0); // clear any prior scaling
+  ctx.scale(dpr, dpr);
+  computeScale();
+  draw();
+}
+
+function computeScale() {
+  // We want the visible coordinate range to be roughly [-6, 6] on both axes with padding.
+  const minDim = Math.min(width, height);
+  // Leave 60px padding on each side -> usable ~ minDim - 120
+  const usable = Math.max(minDim - 120, 200);
+  scale = usable / 14; // 14 units across (-7 to +7)
+  originX = width / 2;
+  originY = height / 2;
+}
+
+// ------------------------------------------------------------------
+// Coordinate conversion helpers
+// ------------------------------------------------------------------
+function worldToScreen(x, y) {
+  return {
+    x: originX + x * scale,
+    y: originY - y * scale // canvas y goes down, world y goes up
+  };
+}
+
+function screenToWorld(sx, sy) {
+  return {
+    x: (sx - originX) / scale,
+    y: (originY - sy) / scale
+  };
+}
+
+function snapToGrid(x, y) {
+  // Snap to nearest 0.5 unit for clean interaction, but keep smooth for visual
+  return { x: Math.round(x * 2) / 2, y: Math.round(y * 2) / 2 };
+}
+
+// ------------------------------------------------------------------
+// Area formula (Shoelace / coordinate geometry)
+// ------------------------------------------------------------------
+function computeArea() {
+  const [p1, p2, p3] = points;
+  const area = 0.5 * Math.abs(
+    p1.x * (p2.y - p3.y) +
+    p2.x * (p3.y - p1.y) +
+    p3.x * (p1.y - p2.y)
+  );
+  return area;
+}
+
+// ------------------------------------------------------------------
+// Drawing
+// ------------------------------------------------------------------
+function draw() {
+  // Background
+  ctx.fillStyle = '#0f1220';
+  ctx.fillRect(0, 0, width, height);
+
+  // Subtle radial glow behind center
+  const cx = originX, cy = originY;
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(width, height) / 1.6);
+  grad.addColorStop(0, 'rgba(86,196,240,0.06)');
+  grad.addColorStop(0.5, 'rgba(88,224,168,0.03)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, width, height);
+
+  // Grid
+  drawGrid();
+
+  // Triangle fill + outline
+  drawTriangle();
+
+  // Axes
+  drawAxes();
+
+  // Points (drawn last so they sit on top)
+  drawPoints();
+}
+
+function drawGrid() {
+  const tick = 1;
+  const minX = Math.floor(-width / scale / 2) - 1;
+  const maxX = Math.ceil(width / scale / 2) + 1;
+  const minY = Math.floor(-height / scale / 2) - 1;
+  const maxY = Math.ceil(height / scale / 2) + 1;
+
+  ctx.lineWidth = 1;
+
+  for (let x = minX; x <= maxX; x += tick) {
+    const s = worldToScreen(x, 0);
+    ctx.beginPath();
+    ctx.moveTo(s.x, 0);
+    ctx.lineTo(s.x, height);
+    ctx.strokeStyle = (Math.abs(x) < 0.01) ? '#334b72' : '#1a2238';
+    ctx.stroke();
+  }
+
+  for (let y = minY; y <= maxY; y += tick) {
+    const s = worldToScreen(0, y);
+    ctx.beginPath();
+    ctx.moveTo(0, s.y);
+    ctx.lineTo(width, s.y);
+    ctx.strokeStyle = (Math.abs(y) < 0.01) ? '#334b72' : '#1a2238';
+    ctx.stroke();
+  }
+}
+
+function drawAxes() {
+  ctx.lineWidth = 2;
+  // X axis
+  const xAxis = worldToScreen(0, 0);
+  ctx.beginPath();
+  ctx.moveTo(xAxis.x, 0);
+  ctx.lineTo(xAxis.x, height);
+  ctx.strokeStyle = '#334b72';
+  ctx.stroke();
+
+  // Y axis (horizontal line at y=0)
+  const yAxis = worldToScreen(0, 0);
+  ctx.beginPath();
+  ctx.moveTo(0, yAxis.y);
+  ctx.lineTo(width, yAxis.y);
+  ctx.strokeStyle = '#334b72';
+  ctx.stroke();
+}
+
+function drawTriangle() {
+  const pts = points.map(p => worldToScreen(p.x, p.y));
+
+  // Fill with low opacity gradient
+  const areaVal = computeArea();
+  const opacity = Math.min(areaVal / 30, 0.35); // scale opacity with size for visual interest
+
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  ctx.lineTo(pts[1].x, pts[1].y);
+  ctx.lineTo(pts[2].x, pts[2].y);
+  ctx.closePath();
+
+  // Subtle gradient fill based on area size
+  const grad = ctx.createLinearGradient(pts[0].x, pts[0].y, pts[2].x, pts[2].y);
+  grad.addColorStop(0, `rgba(88,224,168,${0.18 + opacity})`);
+  grad.addColorStop(1, `rgba(86,196,240,${0.18 + opacity})`);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Strokes
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = '#58e0a8';
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  ctx.lineTo(pts[1].x, pts[1].y);
+  ctx.lineTo(pts[2].x, pts[2].y);
+  ctx.closePath();
+  ctx.stroke();
+
+  // Subtle border glow
+  ctx.shadowColor = 'rgba(88,224,168,0.35)';
+  ctx.shadowBlur = 8;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+function drawPoints() {
+  const colors = ['#58e0a8', '#56c4f0', '#d4946e'];
+  const labels = ['A', 'B', 'C'];
+
+  points.forEach((p, i) => {
+    const s = worldToScreen(p.x, p.y);
+    const r = 14;
+
+    // Outer glow ring
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, r + 6, 0, Math.PI * 2);
+    ctx.fillStyle = colors[i] + '22';
+    ctx.fill();
+
+    // Main dot
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = colors[i];
+    ctx.fill();
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#0f1220';
+    ctx.stroke();
+
+    // Label text
+    ctx.font = '700 14px "Inter", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#e8ecf1';
+    ctx.fillText(labels[i], s.x, s.y);
+  });
+}
+
+// ------------------------------------------------------------------
+// UI updates
+// ------------------------------------------------------------------
+function updateUI() {
+  // Area display
+  const area = computeArea();
+  document.getElementById(AREA_DISPLAY_ID).textContent = area.toFixed(2);
+
+  // Vertex list
+  const list = document.getElementById(VERTICES_LIST_ID);
+  list.innerHTML = points.map((p, i) => {
+    const colors = ['#58e0a8', '#56c4f0', '#d4946e'];
+    return `
+      <div class="vertex-row">
+        <span class="dot" style="background:${colors[i]}; color:${colors[i]}"></span>
+        <span class="v-label">${p.label}</span>
+        <span class="v-coords">(${p.x.toFixed(2)}, ${p.y.toFixed(2)})</span>
+      </div>`;
+  }).join('');
+
+  // Formula box also shows live substitution (optional enhancement)
+  // Keeping formula static per request.
+}
+
+// ------------------------------------------------------------------
+// Interaction
+// ------------------------------------------------------------------
+function getPointIndexAt(sx, sy) {
+  for (let i = 0; i < points.length; i++) {
+    const s = worldToScreen(points[i].x, points[i].y);
+    const dx = sx - s.x;
+    const dy = sy - s.y;
+    if (dx * dx + dy * dy < 20 * 20) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function onPointerDown(e) {
+  // Handle both mouse and touch
+  const sx = e.clientX ? e.clientX : e.touches ? e.touches[0].clientX : 0;
+  const sy = e.clientY ? e.clientY : e.touches ? e.touches[0].clientY : 0;
+  const rect = canvas.getBoundingClientRect();
+  const cx = sx - rect.left;
+  const cy = sy - rect.top;
+
+  dragIndex = getPointIndexAt(cx, cy);
+  if (dragIndex >= 0) {
+    const w = screenToWorld(cx, cy);
+    offsetX = points[dragIndex].x - w.x;
+    offsetY = points[dragIndex].y - w.y;
+    canvas.style.cursor = 'move';
+    e.preventDefault();
+  }
+}
+
+function onPointerMove(e) {
+  if (dragIndex < 0) return;
+  const sx = e.clientX ? e.clientX : e.touches ? e.touches[0].clientX : 0;
+  const sy = e.clientY ? e.clientY : e.touches ? e.touches[0].clientY : 0;
+  const rect = canvas.getBoundingClientRect();
+  const cx = sx - rect.left;
+  const cy = sy - rect.top;
+
+  const w = screenToWorld(cx, cy);
+  points[dragIndex].x = w.x + offsetX;
+  points[dragIndex].y = w.y + offsetY;
+
+  // Keep within visible plane roughly [-8, 8]
+  points[dragIndex].x = Math.max(-8, Math.min(8, points[dragIndex].x));
+  points[dragIndex].y = Math.max(-8, Math.min(8, points[dragIndex].y));
+
+  // Snap to half-unit for cleaner interaction
+  const snapped = snapToGrid(points[dragIndex].x, points[dragIndex].y);
+  points[dragIndex].x = snapped.x;
+  points[dragIndex].y = snapped.y;
+
+  draw();
+  updateUI();
+  e.preventDefault();
+}
+
+function onPointerUp() {
+  dragIndex = -1;
+  canvas.style.cursor = 'crosshair';
+}
+
+// ------------------------------------------------------------------
+// Event binding
+// ------------------------------------------------------------------
+canvas.addEventListener('mousedown', onPointerDown);
+window.addEventListener('mousemove', onPointerMove);
+window.addEventListener('mouseup', onPointerUp);
+
+canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+window.addEventListener('touchmove', onPointerMove, { passive: false });
+window.addEventListener('touchend', onPointerUp);
+
+// Resize observer for responsive grid
+window.addEventListener('resize', () => {
+  resize();
+});
+
+// ------------------------------------------------------------------
+// Init
+// ------------------------------------------------------------------
+resize();
+updateUI();
+</script>
+</body>
+</html>
