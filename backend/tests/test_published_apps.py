@@ -99,6 +99,12 @@ class PublishedAppRoutesTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Published projects", response.text)
         self.assertIn('href="/a1b2c3"', response.text)
+        self.assertIn('src="/a1b2c3"', response.text)
+
+        search = self.client.get("/?q=a1b")
+        self.assertIn('value="a1b"', search.text)
+        self.assertIn('href="/a1b2c3"', search.text)
+        self.assertIn("No projects match", self.client.get("/?q=missing").text)
 
     def test_missing_or_invalid_projects_return_404_without_leaking_paths(self) -> None:
         for path in ("/missing", "/abcdef", "/__published/a1b2c3/../../backend/.env"):

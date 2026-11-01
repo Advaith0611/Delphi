@@ -125,7 +125,7 @@ def _embed_origins() -> str:
     """Origins permitted to put a published-app shell in an iframe."""
     configured = os.getenv(
         "PYTHIOS_EMBED_ORIGINS",
-        "https://pythios.xyz,https://www.pythios.xyz,https://delphi.pythios.xyz",
+        "https://pythios.xyz,https://www.pythios.xyz,https://delphi.pythios.xyz,https://app.pythios.xyz",
     )
     origins: list[str] = []
     for candidate in configured.split(","):
@@ -136,19 +136,23 @@ def _embed_origins() -> str:
     return " ".join(origins) or "'none'"
 
 
-def _directory() -> HTMLResponse:
+def _directory(query: str = "") -> HTMLResponse:
     project_ids = sorted(set(published_apps.list_project_ids()) | set(github_published_apps.list_project_ids()))
+    search = query.strip().lower()
+    if search:
+        project_ids = [project_id for project_id in project_ids if search in project_id]
     project_cards = "".join(
-        f'<li><a href="/{escape(project_id)}"><span>{escape(project_id)}</span><small>Open project</small></a></li>'
+        f'''<li class="project-card"><div class="preview"><iframe title="Preview of {escape(project_id)}" src="/{escape(project_id)}" loading="lazy" tabindex="-1"></iframe></div><div class="card-footer"><strong>{escape(project_id)}</strong><a href="/{escape(project_id)}">Open project <span aria-hidden="true">→</span></a></div></li>'''
         for project_id in project_ids
-    ) or '<li class="empty">No published projects yet.</li>'
+    ) or ('<li class="empty">No projects match that ID.</li>' if search else '<li class="empty">No published projects yet.</li>')
+    search_value = escape(query, quote=True)
     document = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pythios projects</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#16110d;color:#f6efe5;font:16px system-ui,sans-serif}}main{{width:min(960px,calc(100% - 40px));margin:72px auto}}h1{{margin:0;font-size:clamp(2rem,5vw,3.6rem)}}p{{color:#cdbfac;max-width:620px;line-height:1.55}}ul{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;padding:0;list-style:none;margin-top:32px}}a{{display:flex;justify-content:space-between;gap:12px;padding:20px;border:1px solid #5c4937;border-radius:12px;color:inherit;text-decoration:none;background:#211912}}a:hover{{border-color:#d6a24c;background:#2a2017}}small{{color:#d6a24c;white-space:nowrap}}.empty{{color:#cdbfac}}</style>
-</head><body><main><h1>Published projects</h1><p>Choose a Pythios project to open.</p><ul>{project_cards}</ul></main></body></html>"""
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#16110d;color:#f6efe5;font:16px system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 40px));margin:64px auto}}h1{{margin:0;font-size:clamp(2rem,5vw,3.6rem)}}p{{color:#cdbfac;max-width:620px;line-height:1.55}}form{{margin:28px 0}}input{{width:min(440px,100%);padding:13px 15px;border:1px solid #68533d;border-radius:9px;background:#211912;color:#f6efe5;font:inherit;outline:none}}input:focus{{border-color:#d6a24c;box-shadow:0 0 0 3px #d6a24c33}}ul{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;padding:0;list-style:none;margin:0}}.project-card{{overflow:hidden;border:1px solid #5c4937;border-radius:12px;background:#211912}}.preview{{height:210px;background:#fff;overflow:hidden;pointer-events:none}}iframe{{display:block;width:100%;height:100%;border:0;background:#fff}}.card-footer{{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px}}.card-footer strong{{font:600 14px ui-monospace,SFMono-Regular,monospace}}.card-footer a{{color:#d6a24c;text-decoration:none;font-size:14px}}.card-footer a:hover{{text-decoration:underline}}.empty{{color:#cdbfac}}</style>
+</head><body><main><h1>Published projects</h1><p>Preview a project, or search by its project ID.</p><form action="/" method="get"><label for="project-search" style="position:absolute;left:-9999px">Search project ID</label><input id="project-search" name="q" type="search" value="{search_value}" placeholder="Search project ID" autocomplete="off" spellcheck="false"></form><ul>{project_cards}</ul></main></body></html>"""
     return HTMLResponse(document, headers={
-        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors " + _embed_origins(),
+        "Content-Security-Policy": "default-src 'none'; frame-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors " + _embed_origins(),
         "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff",
     })
 
@@ -201,8 +205,8 @@ def _exists(project_id: str) -> bool:
 
 
 @router.get("/", include_in_schema=False)
-async def published_app_directory():
-    return _directory()
+async def published_app_directory(q: str = ""):
+    return _directory(q)
 
 
 @router.get("/{project_id}", include_in_schema=False)
