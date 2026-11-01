@@ -8,6 +8,12 @@ identifier, so a project such as `a1b2c3` is available at:
 https://app.pythios.xyz/a1b2c3
 ```
 
+The root URL is a directory of all published projects:
+
+```
+https://app.pythios.xyz/
+```
+
 ## How it works
 
 `POST /generate` calls `ai-core/main.py`, which calls `ProjectBuilder`. After
@@ -32,6 +38,11 @@ The repository does not contain a Netlify routing rule for this subdomain.
 Pointing `app.pythios.xyz` directly at the existing Render backend keeps the
 main Netlify builder site separate and avoids a Netlify catch-all rewrite that
 would break the builder's own routes.
+
+Published project shells permit embedding only from the Pythios whiteboard
+origins. Set `PYTHIOS_EMBED_ORIGINS` to a comma-separated list if the
+whiteboard is hosted on another HTTPS origin. The generated app remains inside
+its restricted sandboxed iframe.
 
 In Render, add `app.pythios.xyz` as a custom domain for the existing backend
 service, then create this DNS record (or use the exact target Render displays

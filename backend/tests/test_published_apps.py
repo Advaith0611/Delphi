@@ -85,6 +85,7 @@ class PublishedAppRoutesTests(unittest.TestCase):
         self.assertIn('sandbox="allow-scripts allow-forms allow-modals"', shell.text)
         self.assertNotIn("allow-same-origin", shell.text)
         self.assertIn("/__published/a1b2c3/index.html", shell.text)
+        self.assertIn("frame-ancestors https://pythios.xyz", shell.headers["content-security-policy"])
 
         document = self.client.get("/__published/a1b2c3/index.html", headers={"Sec-Fetch-Dest": "iframe"})
         self.assertEqual(document.status_code, 200)
@@ -92,6 +93,12 @@ class PublishedAppRoutesTests(unittest.TestCase):
         self.assertIn("<script>", document.text)
         self.assertIn("<style>", document.text)
         self.assertEqual(self.client.get("/__published/a1b2c3/index.html").status_code, 404)
+
+    def test_root_displays_a_directory_of_published_projects(self) -> None:
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Published projects", response.text)
+        self.assertIn('href="/a1b2c3"', response.text)
 
     def test_missing_or_invalid_projects_return_404_without_leaking_paths(self) -> None:
         for path in ("/missing", "/abcdef", "/__published/a1b2c3/../../backend/.env"):

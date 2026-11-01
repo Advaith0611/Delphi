@@ -42,10 +42,4 @@ app.add_middleware(
 )
 
 app.include_router(router)
-
-
-@app.get("/")
-async def root():
-    return {"name": "Pythios Spatial AI API", "status": "ok"}
-
 app.include_router(published_apps_router)

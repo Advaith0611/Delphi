@@ -100,6 +100,18 @@ class PublishedAppStore:
     def exists(self, project_id: str) -> bool:
         return self.resolve_file(project_id) is not None
 
+    def list_project_ids(self) -> list[str]:
+        """Return every locally published project with a readable entry page."""
+        project_ids: set[str] = set()
+        for manifest in self.root.glob("*.json"):
+            project_id = manifest.stem
+            if is_valid_project_id(project_id) and self.exists(project_id):
+                project_ids.add(project_id)
+        for directory in self.root.iterdir():
+            if directory.is_dir() and is_valid_project_id(directory.name) and self.exists(directory.name):
+                project_ids.add(directory.name)
+        return sorted(project_ids)
+
     def _resolve_app_root(self, project_id: str) -> Path | None:
         manifest = self.root / f"{project_id}.json"
         if manifest.is_file():
