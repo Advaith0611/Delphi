@@ -97,7 +97,7 @@ class PublishedAppRoutesTests(unittest.TestCase):
     def test_root_displays_a_directory_of_published_projects(self) -> None:
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Published projects", response.text)
+        self.assertIn("Published <em>projects</em>", response.text)
         self.assertIn('href="/a1b2c3"', response.text)
         self.assertIn('src="/a1b2c3"', response.text)
 
